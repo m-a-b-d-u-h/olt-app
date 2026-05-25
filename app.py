@@ -37,12 +37,12 @@ with app.app_context():
 def dashboard():
     olts = OLT.query.all()
     onts = ONT.query.all()
-    activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(20).all()
+    activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
     return render_template('dashboard.html', olts=olts, onts=onts, activities=activities)
 
 @app.route('/api/activities')
 def api_activities():
-    logs = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(50).all()
+    logs = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
     return jsonify([{
         'id': l.id, 'olt_name': l.olt_name, 'action': l.action,
         'description': l.description,
