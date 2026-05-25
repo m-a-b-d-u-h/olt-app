@@ -21,4 +21,4 @@ jobs:
           script: |
             cd /home/olt/olt-app
             git pull origin master
-            ./setup.sh
+            bash setup.sh
