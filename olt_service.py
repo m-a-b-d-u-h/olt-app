@@ -4,19 +4,7 @@ import time
 from netmiko import ConnectHandler
 
 
-def _get_netmiko_params(olt, telnet=False):
-    if telnet:
-        return {
-            'device_type': 'huawei_telnet',
-            'host': olt.ip,
-            'username': olt.username,
-            'password': olt.password,
-            'port': 23,
-            'timeout': 15,
-            'global_delay_factor': 2,
-            'session_timeout': 60,
-            'global_cmd_verify': False,
-        }
+def _get_netmiko_params(olt):
     return {
         'device_type': 'huawei',
         'host': olt.ip,
@@ -28,6 +16,89 @@ def _get_netmiko_params(olt, telnet=False):
         'conn_timeout': 10,
         'session_timeout': 60,
     }
+
+
+def _telnet_login(olt):
+    tn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tn.settimeout(10)
+    tn.connect((olt.ip, 23))
+    tn.sendall(b'\n')
+    time.sleep(1)
+    data = b''
+    while True:
+        try:
+            chunk = tn.recv(4096)
+            if not chunk: break
+            data += chunk
+            if b'name:' in data.lower() or b'Username:' in data or b'login:' in data:
+                break
+        except socket.timeout:
+            break
+    tn.sendall(olt.username.encode() + b'\n')
+    data = b''
+    while True:
+        try:
+            chunk = tn.recv(4096)
+            if not chunk: break
+            data += chunk
+            if b'assword:' in data:
+                break
+        except socket.timeout:
+            break
+    tn.sendall(olt.password.encode() + b'\n')
+    time.sleep(1)
+    tn.settimeout(None)
+    return tn
+
+
+def _telnet_shell(olt, commands, delay_after=2):
+    tn = _telnet_login(olt)
+    output_parts = []
+    try:
+        for cmd in commands:
+            if cmd:
+                tn.sendall(cmd.encode() + b'\n')
+                time.sleep(delay_after)
+                tn.settimeout(3)
+                out = b''
+                while True:
+                    try:
+                        chunk = tn.recv(4096)
+                        if not chunk: break
+                        out += chunk
+                    except socket.timeout:
+                        break
+                tn.settimeout(None)
+                output_parts.append(out.decode('ascii', errors='replace'))
+    finally:
+        try:
+            tn.close()
+        except:
+            pass
+    return '\n'.join(output_parts)
+
+
+def _ssh_shell(olt, commands, delay_after=2):
+    params = _get_netmiko_params(olt)
+    conn = ConnectHandler(**params)
+    conn.enable()
+    conn.config_mode()
+    output_parts = []
+    for cmd in commands:
+        if cmd:
+            out = conn.send_command(cmd, read_timeout=delay_after + 10)
+            time.sleep(1)
+            output_parts.append(out)
+    conn.disconnect()
+    return '\n'.join(output_parts)
+
+
+def _shell(olt, commands, delay_after=2):
+    try:
+        return _ssh_shell(olt, commands, delay_after)
+    except Exception:
+        return _telnet_shell(olt, commands, delay_after)
+
 
 def check_olt_status(olt):
     for port in (22, 23):
@@ -41,43 +112,23 @@ def check_olt_status(olt):
             pass
     return {'status': 'offline'}
 
-def _shell(olt, commands, delay_after=2, use_telnet=False):
-    params = _get_netmiko_params(olt, telnet=use_telnet)
-    try:
-        conn = ConnectHandler(**params)
-        if not use_telnet:
-            conn.enable()
-            conn.config_mode()
-        output_parts = []
-        for cmd in commands:
-            if cmd:
-                out = conn.send_command(cmd, read_timeout=delay_after + 10)
-                time.sleep(1)
-                output_parts.append(out)
-        conn.disconnect()
-        return '\n'.join(output_parts)
-    except Exception as e:
-        if not use_telnet:
-            return _shell(olt, commands, delay_after, use_telnet=True)
-        raise Exception(f'SSH error for {olt.ip}: {str(e)}')
 
-def execute_command(olt, command, use_telnet=False):
-    params = _get_netmiko_params(olt, telnet=use_telnet)
+def execute_command(olt, command):
     try:
+        params = _get_netmiko_params(olt)
         conn = ConnectHandler(**params)
-        if not use_telnet:
-            conn.enable()
+        conn.enable()
         output = conn.send_command(command, delay=2)
         conn.disconnect()
         return output
-    except Exception as e:
-        if not use_telnet:
-            return execute_command(olt, command, use_telnet=True)
-        raise Exception(f'Command failed: {str(e)}')
+    except Exception:
+        return _telnet_shell(olt, [command], delay_after=2)
+
 
 def get_olt_config(olt):
     cmd = 'display current-configuration' if olt.type == 'Huawei' else 'show running-config'
     return execute_command(olt, cmd)
+
 
 def scan_unregistered(olt):
     out = _shell(olt, ['display ont autofind all'])
@@ -93,6 +144,7 @@ def scan_unregistered(olt):
                 port_parts = parts[1].split('/')
                 results.append({'slot': port_parts[1], 'pon': port_parts[2], 'sn': parts[3]})
     return results
+
 
 def provision_ont(olt, slot, pon, sn, vlan, nama, alamat='',
                   pppoe_user='', pppoe_pass='', additional_vlans='',
@@ -172,6 +224,7 @@ def provision_ont(olt, slot, pon, sn, vlan, nama, alamat='',
         'all_vlans': all_vlans
     }
 
+
 def delete_ont_from_olt(olt, slot, pon, ont_id):
     sp_output = _shell(olt, [
         f'display service-port port 0/{slot}/{pon} ont {ont_id}',
@@ -192,6 +245,7 @@ def delete_ont_from_olt(olt, slot, pon, ont_id):
 
     return _shell(olt, cmds, delay_after=3)
 
+
 def get_ont_optical_info(olt, slot, pon, ont_id):
     out = _shell(olt, [
         f'interface gpon 0/{slot}',
@@ -200,6 +254,7 @@ def get_ont_optical_info(olt, slot, pon, ont_id):
     ])
     m = re.search(r'Rx\s+optical\s+power\(dBm\)\s*:\s*([-0-9.]+)', out, re.I)
     return (m.group(1) + ' dBm') if m else None
+
 
 def get_onts_optical_info(olt, onts):
     results = {}
@@ -226,6 +281,7 @@ def get_onts_optical_info(olt, onts):
         results[key] = (m.group(1) + ' dBm') if m else None
     return results
 
+
 def get_onts_vlan_info(olt, onts):
     results = {}
     valid = [o for o in onts if o.get('ont_id') is not None]
@@ -249,6 +305,7 @@ def get_onts_vlan_info(olt, onts):
         m = re.search(r'^\s*\d+\s+(\d+)\s+', after, re.M)
         results[key] = m.group(1) if m else None
     return results
+
 
 def get_registered_onts(olt, slot, pon):
     raw = _shell(olt, [f'interface gpon 0/{slot}', f'display ont info {pon} all', 'quit'])
@@ -289,6 +346,7 @@ def get_registered_onts(olt, slot, pon):
             'status': ont.get('status', 'online'),
         })
     return result, raw
+
 
 def configure_tr069(olt, slot, pon, ont_id, profile='acs'):
     out = _shell(olt, [
