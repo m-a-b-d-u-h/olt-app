@@ -252,6 +252,7 @@ def api_ont_sync():
                     existing.pon = data['pon']
                     existing.ont_id = ont['ont_id']
                     existing.status = ont.get('status', 'online')
+                    existing.name = ont.get('description', '')
                     existing.rx_power = ont.get('rx_power')
                     existing.vlan = ont.get('vlan', '')
                     existing.vlan_ids = ont.get('vlan', '')
