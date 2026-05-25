@@ -5,14 +5,10 @@
 .terminal-wrapper { display:flex; flex-direction:column; height:calc(100vh - 90px); margin:-24px -32px; }
 .terminal-header { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#0f0f0f; border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0; }
 .terminal-body { flex:1; display:flex; overflow:hidden; }
-.terminal-screen { flex:1; background:#0a0a0a; display:flex; flex-direction:column; }
-.terminal-output { flex:1; overflow-y:auto; padding:12px; font-family:'SF Mono','Fira Code',monospace; font-size:13px; line-height:1.5; color:#e2e8f0; background:#0a0a0a; white-space:pre-wrap; }
-.terminal-output .prompt { color:#60a5fa; }
+.terminal-screen { flex:1; background:#0a0a0a; display:flex; flex-direction:column; position:relative; }
+.terminal-output { flex:1; overflow-y:auto; padding:12px; font-family:'SF Mono','Fira Code',monospace; font-size:13px; line-height:1.5; color:#e2e8f0; background:#0a0a0a; white-space:pre-wrap; outline:none; cursor:text; }
 .terminal-output .system { color:rgba(255,255,255,0.4); font-style:italic; }
 .terminal-output .error { color:#f87171; }
-.terminal-input-row { display:flex; padding:8px 12px; background:#0a0a0a; border-top:1px solid rgba(255,255,255,0.05); flex-shrink:0; }
-.terminal-input-row input { flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:8px 12px; color:#e2e8f0; font-family:'SF Mono','Fira Code',monospace; font-size:13px; outline:none; }
-.terminal-input-row input:focus { border-color:#3b82f6; }
 .quick-panel { width:280px; background:#0f0f0f; border-left:1px solid rgba(255,255,255,0.1); padding:12px; overflow-y:auto; flex-shrink:0; }
 .quick-panel h3 { font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.3); font-weight:700; margin-bottom:12px; }
 .quick-grid { display:flex; flex-direction:column; gap:4px; }
@@ -20,6 +16,8 @@
 .quick-btn:not(:disabled) { background:#e2e8f0; color:#0f172a; }
 .quick-btn:not(:disabled):hover { background:#cbd5e1; }
 .quick-btn:disabled { background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.15); cursor:not-allowed; }
+#term-cursor { animation:blink 1s step-end infinite; }
+@keyframes blink { 50% { opacity:0; } }
 @media(max-width:768px){ .quick-panel { display:none; } .terminal-wrapper { margin:-16px; height:calc(100vh - 60px); } }
 </style>
 
@@ -41,11 +39,8 @@
     </div>
     <div class="terminal-body">
         <div class="terminal-screen">
-            <div class="terminal-output" id="term-output">
-                <div class="system">[System] Pilih OLT dan klik Connect untuk memulai sesi terminal.</div>
-            </div>
-            <div class="terminal-input-row">
-                <input type="text" id="term-input" placeholder="Enter command..." disabled onkeydown="if(event.key==='Enter')sendCommand()">
+            <div class="terminal-output" id="term-output" tabindex="-1">
+                <span class="system">[System] Pilih OLT dan klik Connect untuk memulai sesi terminal.</span>
             </div>
         </div>
         <div class="quick-panel">
@@ -62,6 +57,8 @@
 <script>
 let socket = null;
 let connected = false;
+let inputBuffer = '';
+let inputLine = null;
 
 let QUICK_CMDS = [];
 
@@ -124,14 +121,86 @@ async function addQuickCmd() {
 document.getElementById('quick-grid').innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:11px;padding:8px;text-align:center;">Loading...</div>';
 loadQuickCmds();
 
+function getTerm() { return document.getElementById('term-output'); }
+
 function appendText(text, cls='') {
-    const el = document.getElementById('term-output');
+    const el = getTerm();
     const div = document.createElement('div');
     if (cls) div.className = cls;
     div.textContent = text;
     el.appendChild(div);
     el.scrollTop = el.scrollHeight;
 }
+
+function renderInputLine() {
+    const el = getTerm();
+    if (inputLine) { inputLine.remove(); inputLine = null; }
+    inputLine = document.createElement('div');
+    inputLine.style.display = 'flex';
+    inputLine.style.alignItems = 'center';
+    inputLine.style.gap = '0';
+    const prompt = document.createElement('span');
+    prompt.style.color = '#60a5fa';
+    prompt.textContent = '> ';
+    inputLine.appendChild(prompt);
+    const txt = document.createElement('span');
+    txt.textContent = inputBuffer;
+    inputLine.appendChild(txt);
+    const cursor = document.createElement('span');
+    cursor.id = 'term-cursor';
+    cursor.textContent = '\u2588';
+    cursor.style.color = '#e2e8f0';
+    inputLine.appendChild(cursor);
+    el.appendChild(inputLine);
+    el.scrollTop = el.scrollHeight;
+}
+
+function removeInputLine() {
+    if (inputLine) { inputLine.remove(); inputLine = null; }
+}
+
+function focusTerminal() {
+    const el = getTerm();
+    el.focus({preventScroll: true});
+}
+
+getTerm().addEventListener('keydown', function(e) {
+    if (!connected) return;
+
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const cmd = inputBuffer;
+        if (!cmd.trim()) return;
+        removeInputLine();
+        appendText('> ' + cmd, 'prompt');
+        socket.emit('terminal:input', cmd + '\n');
+        inputBuffer = '';
+        renderInputLine();
+        focusTerminal();
+        return;
+    }
+
+    if (e.key === 'Backspace') {
+        e.preventDefault();
+        inputBuffer = inputBuffer.slice(0, -1);
+        renderInputLine();
+        focusTerminal();
+        return;
+    }
+
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+    if (e.key.length === 1) {
+        e.preventDefault();
+        inputBuffer += e.key;
+        renderInputLine();
+        focusTerminal();
+    }
+});
+
+getTerm().addEventListener('click', function() {
+    if (connected) focusTerminal();
+});
 
 function connectTerminal() {
     const sel = document.getElementById('term-olt');
@@ -156,8 +225,9 @@ function connectTerminal() {
         document.getElementById('term-status').className = 'badge badge-online';
         document.getElementById('connect-btn').style.display = 'none';
         document.getElementById('disconnect-btn').style.display = '';
-        document.getElementById('term-input').disabled = false;
-        document.getElementById('term-input').focus();
+        inputBuffer = '';
+        renderInputLine();
+        focusTerminal();
         updateQuickBtnState();
         appendText('[System] Connected.', 'system');
     });
@@ -167,7 +237,10 @@ function connectTerminal() {
         disconnectTerminal();
     });
     socket.on('terminal:data', (data) => {
+        removeInputLine();
         appendText(data);
+        renderInputLine();
+        focusTerminal();
     });
     socket.on('disconnect', () => disconnectTerminal());
 }
@@ -179,18 +252,10 @@ function disconnectTerminal() {
     document.getElementById('term-status').className = 'badge badge-offline';
     document.getElementById('connect-btn').style.display = '';
     document.getElementById('disconnect-btn').style.display = 'none';
-    document.getElementById('term-input').disabled = true;
+    inputBuffer = '';
+    removeInputLine();
     updateQuickBtnState();
     appendText('[System] Disconnected.', 'system');
-}
-
-function sendCommand() {
-    if (!connected || !socket) return;
-    const input = document.getElementById('term-input');
-    const cmd = input.value;
-    if (!cmd) return;
-    socket.emit('terminal:input', cmd + '\n');
-    input.value = '';
 }
 
 function updateQuickBtnState() {
