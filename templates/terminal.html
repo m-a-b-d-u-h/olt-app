@@ -49,7 +49,10 @@
             </div>
         </div>
         <div class="quick-panel">
-            <h3>Quick Ops</h3>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h3 style="margin:0;">Quick Ops</h3>
+                <button onclick="addQuickCmd()" style="background:none;border:none;color:#60a5fa;font-size:18px;cursor:pointer;padding:0 4px;" title="Add Command">+</button>
+            </div>
             <div class="quick-grid" id="quick-grid"></div>
         </div>
     </div>
@@ -60,22 +63,66 @@
 let socket = null;
 let connected = false;
 
-const QUICK_CMDS = [
-    {id:'init',label:'Init Session',cmds:['enable','config']},
-    {id:'scan',label:'Scan ONT',cmds:['display ont autofind all']},
-    {id:'onts',label:'ONT List',cmds:['interface gpon 0/1','display ont info 0 all']},
-    {id:'board',label:'Board Status',cmds:['display board 0']},
-    {id:'vlan',label:'VLAN List',cmds:['display vlan all']},
-    {id:'save',label:'Save Config',cmds:['save','y']},
-    {id:'ver',label:'Version',cmds:['display version']},
-    {id:'alarm',label:'Alarm List',cmds:['display alarm active all']},
-    {id:'cpu',label:'CPU Load',cmds:['display cpu']},
-    {id:'mem',label:'Memory',cmds:['display memory']},
-];
+let QUICK_CMDS = [];
 
-document.getElementById('quick-grid').innerHTML = QUICK_CMDS.map(c =>
-    '<button class="quick-btn" id="q-'+c.id+'" onclick="runQuick(\''+c.id+'\')" disabled>'+c.label+'</button>'
-).join('');
+async function loadQuickCmds() {
+    const res = await fetch('/api/quick-commands');
+    QUICK_CMDS = await res.json();
+    renderQuickCmds();
+}
+
+function renderQuickCmds() {
+    const grid = document.getElementById('quick-grid');
+    grid.innerHTML = QUICK_CMDS.map(c =>
+        `<div style="display:flex;gap:4px;align-items:stretch;">
+            <button class="quick-btn" id="q-${c.id}" onclick="runQuick('${c.id}')" disabled style="flex:1;">${c.label}</button>
+            <button class="quick-btn" onclick="editQuickCmd('${c.id}')" disabled style="width:28px;padding:4px;font-size:11px;flex:none;" id="qe-${c.id}" title="Edit">✎</button>
+            <button class="quick-btn" onclick="deleteQuickCmd('${c.id}')" disabled style="width:28px;padding:4px;font-size:11px;flex:none;" id="qd-${c.id}" title="Delete">✕</button>
+        </div>`
+    ).join('');
+}
+
+async function editQuickCmd(id) {
+    const cmd = QUICK_CMDS.find(c => c.id === id);
+    if (!cmd) return;
+    const label = prompt('Label:', cmd.label);
+    if (!label) return;
+    const cmdsStr = prompt('Commands (one per line):', cmd.commands.join('\n'));
+    if (!cmdsStr) return;
+    const commands = cmdsStr.split('\n').map(s => s.trim()).filter(Boolean);
+    await fetch('/api/quick-commands/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({label, commands}),
+    });
+    await loadQuickCmds();
+    updateQuickBtnState();
+}
+
+async function deleteQuickCmd(id) {
+    if (!confirm('Hapus command ini?')) return;
+    await fetch('/api/quick-commands/' + id, {method: 'DELETE'});
+    await loadQuickCmds();
+    updateQuickBtnState();
+}
+
+async function addQuickCmd() {
+    const label = prompt('Label for new command:');
+    if (!label) return;
+    const cmdsStr = prompt('Commands (one per line):\n\nContoh:\nenable\nconfig\ndisplay vlan all');
+    if (!cmdsStr) return;
+    const commands = cmdsStr.split('\n').map(s => s.trim()).filter(Boolean);
+    await fetch('/api/quick-commands', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({label, commands}),
+    });
+    await loadQuickCmds();
+    updateQuickBtnState();
+}
+
+document.getElementById('quick-grid').innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:11px;padding:8px;text-align:center;">Loading...</div>';
+loadQuickCmds();
 
 function appendText(text, cls='') {
     const el = document.getElementById('term-output');
@@ -111,7 +158,7 @@ function connectTerminal() {
         document.getElementById('disconnect-btn').style.display = '';
         document.getElementById('term-input').disabled = false;
         document.getElementById('term-input').focus();
-        document.querySelectorAll('.quick-btn').forEach(b => b.disabled = false);
+        updateQuickBtnState();
         appendText('[System] Connected.', 'system');
     });
     socket.on('ssh:error', (data) => {
@@ -133,7 +180,7 @@ function disconnectTerminal() {
     document.getElementById('connect-btn').style.display = '';
     document.getElementById('disconnect-btn').style.display = 'none';
     document.getElementById('term-input').disabled = true;
-    document.querySelectorAll('.quick-btn').forEach(b => b.disabled = true);
+    updateQuickBtnState();
     appendText('[System] Disconnected.', 'system');
 }
 
@@ -146,6 +193,10 @@ function sendCommand() {
     input.value = '';
 }
 
+function updateQuickBtnState() {
+    document.querySelectorAll('.quick-btn').forEach(b => b.disabled = !connected);
+}
+
 async function runQuick(id) {
     if (!connected || !socket) return;
     const cmd = QUICK_CMDS.find(c => c.id === id);
@@ -153,12 +204,16 @@ async function runQuick(id) {
     const btn = document.getElementById('q-'+id);
     btn.textContent = '...';
     btn.disabled = true;
-    for (const c of cmd.cmds) {
+    document.getElementById('qe-'+id).disabled = true;
+    document.getElementById('qd-'+id).disabled = true;
+    for (const c of cmd.commands) {
         socket.emit('terminal:input', c + '\n');
         await new Promise(r => setTimeout(r, 1200));
     }
     btn.textContent = cmd.label;
-    btn.disabled = false;
+    btn.disabled = !connected;
+    document.getElementById('qe-'+id).disabled = !connected;
+    document.getElementById('qd-'+id).disabled = !connected;
 }
 </script>
 {% endblock %}

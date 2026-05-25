@@ -21,6 +21,13 @@ class OLT(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     onts = db.relationship('ONT', backref='olt', lazy='dynamic', cascade='all, delete-orphan')
 
+class QuickCommand(db.Model):
+    __tablename__ = 'quick_commands'
+    id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    label = db.Column(db.String(100), nullable=False)
+    commands = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
 class ONT(db.Model):
     __tablename__ = 'onts'
     id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
