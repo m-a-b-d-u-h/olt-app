@@ -43,10 +43,10 @@ def _telnet_login(olt):
     time.sleep(0.5)
 
     data, _ = _telnet_read_until(tn, [b'name:', b'Username:', b'login:'], timeout=8)
-    tn.sendall(olt.username.encode() + b'\n')
+    tn.sendall(olt.username.encode() + b'\r\n')
 
     data, _ = _telnet_read_until(tn, [b'assword:'], timeout=8)
-    tn.sendall(olt.password.encode() + b'\n')
+    tn.sendall(olt.password.encode() + b'\r\n')
 
     data, _ = _telnet_read_until(tn, [b'>', b'#', b']'], timeout=5)
     tn.settimeout(None)
@@ -54,7 +54,7 @@ def _telnet_login(olt):
 
 
 def _telnet_send_command(tn, command, delay=3):
-    tn.sendall(command.encode() + b'\n')
+    tn.sendall(command.encode() + b'\r\n')
     time.sleep(delay)
     data, _ = _telnet_read_until(tn, [b'>', b'#', b']'], timeout=5)
     lines = data.decode('ascii', errors='replace')
@@ -65,10 +65,13 @@ def _telnet_shell(olt, commands, delay_after=2):
     tn = _telnet_login(olt)
     output_parts = []
     try:
+        _telnet_send_command(tn, 'enable', delay=1)
+        _telnet_send_command(tn, 'config', delay=1)
         for cmd in commands:
             if cmd:
                 out = _telnet_send_command(tn, cmd, delay=delay_after)
                 output_parts.append(out)
+        _telnet_send_command(tn, 'quit', delay=1)
     finally:
         try:
             tn.close()
