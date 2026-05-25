@@ -18,6 +18,7 @@
             <a href="/terminal" class="{% if request.path.startswith('/terminal') %}active{% endif %}">Terminal</a>
         </nav>
         <div class="version">v1.0.0 Flask</div>
+        <button class="theme-btn-desktop" onclick="toggleTheme()" id="theme-btn-desk" title="Toggle theme">🌙 Dark</button>
     </aside>
     <div class="main">
         <div class="content">
@@ -44,6 +45,10 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
         <span>Terminal</span>
     </a>
+    <a href="#" onclick="toggleTheme();return false" id="theme-btn-mobile" class="theme-btn">
+        <span id="theme-icon" style="font-size:20px;line-height:1">🌙</span>
+        <span>Theme</span>
+    </a>
 </nav>
 <script>
 function toast(msg, type='success') {
@@ -54,6 +59,25 @@ function toast(msg, type='success') {
     c.appendChild(el);
     setTimeout(() => el.remove(), 5000);
 }
+function toggleTheme() {
+    const html = document.documentElement;
+    const isLight = html.getAttribute('data-theme') === 'light';
+    html.setAttribute('data-theme', isLight ? '' : 'light');
+    localStorage.setItem('theme', isLight ? 'dark' : 'light');
+    updateThemeUI(!isLight);
+}
+function updateThemeUI(isLight) {
+    const icon = document.getElementById('theme-icon');
+    const btn = document.getElementById('theme-btn-desk');
+    if (icon) icon.textContent = isLight ? '☀️' : '🌙';
+    if (btn) btn.textContent = isLight ? '☀️ Light' : '🌙 Dark';
+}
+(function() {
+    const saved = localStorage.getItem('theme') || 'dark';
+    const isLight = saved === 'light';
+    document.documentElement.setAttribute('data-theme', isLight ? 'light' : '');
+    updateThemeUI(isLight);
+})();
 </script>
 {% block scripts %}{% endblock %}
 </body>
