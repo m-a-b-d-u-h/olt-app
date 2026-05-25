@@ -50,8 +50,10 @@ def _shell(olt, commands, delay_after=2, use_telnet=False):
             conn.config_mode()
         output_parts = []
         for cmd in commands:
-            out = conn.send_command(cmd, delay=delay_after)
-            output_parts.append(out)
+            if cmd:
+                out = conn.send_command(cmd, read_timeout=delay_after + 10)
+                time.sleep(1)
+                output_parts.append(out)
         conn.disconnect()
         return '\n'.join(output_parts)
     except Exception as e:
