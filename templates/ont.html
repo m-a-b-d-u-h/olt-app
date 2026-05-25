@@ -17,8 +17,8 @@
     <div class="card mb-4">
         <div class="card-header"><h3>Registered ONTs</h3></div>
         <div class="card-body">
-            <div class="form-grid">
-                <div class="form-group">
+            <div class="form-row filter-row">
+                <div class="form-group" style="flex:1;min-width:0;">
                     <label>OLT</label>
                     <select id="reg-olt" class="form-control" onchange="loadRegistered()">
                         <option value="">-- Select OLT --</option>
@@ -27,7 +27,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="flex:1;min-width:0;">
                     <label>Slot (filter)</label>
                     <select id="reg-slot" class="form-control" onchange="loadRegistered()">
                         <option value="">-- All Slots --</option>
@@ -35,7 +35,7 @@
                         <option value="1">1</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="flex:1;min-width:0;">
                     <label>PON Port (filter)</label>
                     <select id="reg-pon" class="form-control" onchange="loadRegistered()">
                         <option value="">-- All PONs --</option>
