@@ -221,9 +221,11 @@ def provision_ont(olt, slot, pon, sn, vlan, nama, alamat='',
             ], delay_after=2)
 
     if use_tr069:
+        tr069_profile_id = '1' if tr069_profile == 'acs' else '2'
         _shell(olt, [
             f'interface gpon 0/{slot}',
             f'ont ipconfig {pon} {next_id} dhcp vlan 100',
+            f'ont tr069-server-profile {pon} {next_id} {tr069_profile_id}',
             'quit'
         ])
 
@@ -379,12 +381,14 @@ def get_registered_onts(olt, slot, pon):
 
 
 def configure_tr069(olt, slot, pon, ont_id, profile='acs'):
+    profile_id = '1' if profile == 'acs' else '2'
     out = _shell(olt, [
         f'interface gpon 0/{slot}',
         f'ont ipconfig {pon} {ont_id} dhcp vlan 100',
+        f'ont tr069-server-profile {pon} {ont_id} {profile_id}',
         'quit'
     ])
     has_error = bool(re.search(r'(% Bad|% Unrecognized|Error:|Failure:)', out, re.I))
     if has_error:
         return {'status': 'error', 'log': f'TR069 config failed:\n{out}', 'raw_output': out}
-    return {'status': 'success', 'profile': profile, 'log': out}
+    return {'status': 'success', 'profile': profile, 'log': out, 'profile_id': profile_id}
