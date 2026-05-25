@@ -5,21 +5,44 @@
 .terminal-wrapper { display:flex; flex-direction:column; height:calc(100vh - 90px); margin:-24px -32px; }
 .terminal-header { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#0f0f0f; border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0; }
 .terminal-body { flex:1; display:flex; overflow:hidden; }
-.terminal-screen { flex:1; background:#0a0a0a; display:flex; flex-direction:column; }
-.terminal-output { flex:1; overflow-y:auto; padding:12px; font-family:'SF Mono','Fira Code',monospace; font-size:13px; line-height:1.5; color:#e2e8f0; background:#0a0a0a; white-space:pre-wrap; }
-.terminal-output .prompt { color:#60a5fa; }
-.terminal-output .system { color:rgba(255,255,255,0.4); font-style:italic; }
-.terminal-output .error { color:#f87171; }
-.terminal-input-row { display:flex; padding:8px 12px; background:#0a0a0a; border-top:1px solid rgba(255,255,255,0.05); flex-shrink:0; }
-.terminal-input-row input { flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:8px 12px; color:#e2e8f0; font-family:'SF Mono','Fira Code',monospace; font-size:13px; outline:none; }
-.terminal-input-row input:focus { border-color:#3b82f6; }
+.terminal-screen { flex:1; background:#0d0d0d; display:flex; flex-direction:column; }
+.terminal-output {
+    flex:1; overflow-y:auto; padding:12px 16px;
+    font-family:'SF Mono','Fira Code','Cascadia Code','Consolas',monospace;
+    font-size:13px; line-height:1.6; color:#d4d4d4;
+    background:#0d0d0d; white-space:pre-wrap;
+}
+.terminal-output .prompt-line { color:#569cd6; }
+.terminal-output .cmd-output { color:#d4d4d4; }
+.terminal-output .system { color:rgba(255,255,255,0.35); font-style:italic; font-size:12px; }
+.terminal-output .system:before { content:'\25C9 '; }
+.terminal-output .error { color:#f44747; }
+.terminal-output .error:before { content:'\2716 '; }
+.terminal-output .success { color:#6a9955; }
+.terminal-output .highlight { color:#ce9178; }
+.terminal-input-row {
+    display:flex; align-items:center; gap:0;
+    padding:6px 16px; background:#0d0d0d;
+    border-top:1px solid rgba(255,255,255,0.06);
+    flex-shrink:0;
+}
+.terminal-prompt {
+    color:#569cd6; font-family:'SF Mono','Fira Code',monospace;
+    font-size:13px; font-weight:600; padding-right:8px; user-select:none;
+}
+.terminal-input-row input {
+    flex:1; background:transparent; border:none; padding:6px 0;
+    color:#d4d4d4; font-family:'SF Mono','Fira Code',monospace;
+    font-size:13px; outline:none; caret-color:#569cd6;
+}
+.terminal-input-row input::placeholder { color:rgba(255,255,255,0.15); }
 .quick-panel { width:280px; background:#0f0f0f; border-left:1px solid rgba(255,255,255,0.1); padding:12px; overflow-y:auto; flex-shrink:0; }
-.quick-panel h3 { font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.3); font-weight:700; margin-bottom:12px; }
-.quick-grid { display:flex; flex-direction:column; gap:4px; }
+.quick-panel h3 { font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.3); font-weight:700; margin-bottom:12px; margin:0; }
+.quick-grid { display:flex; flex-direction:column; gap:4px; margin-top:12px; }
 .quick-btn { display:flex; align-items:center; justify-content:space-between; padding:6px 10px; border-radius:6px; border:none; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; cursor:pointer; transition:all 0.2s; width:100%; text-align:left; }
-.quick-btn:not(:disabled) { background:#e2e8f0; color:#0f172a; }
-.quick-btn:not(:disabled):hover { background:#cbd5e1; }
-.quick-btn:disabled { background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.15); cursor:not-allowed; }
+.quick-btn:not(:disabled) { background:rgba(86,156,214,0.12); color:#569cd6; }
+.quick-btn:not(:disabled):hover { background:rgba(86,156,214,0.2); }
+.quick-btn:disabled { background:rgba(255,255,255,0.03); color:rgba(255,255,255,0.15); cursor:not-allowed; }
 @media(max-width:768px){ .quick-panel { display:none; } .terminal-wrapper { margin:-16px; height:calc(100vh - 60px); } }
 </style>
 
@@ -42,14 +65,18 @@
     <div class="terminal-body">
         <div class="terminal-screen">
             <div class="terminal-output" id="term-output">
-                <div class="system">[System] Pilih OLT dan klik Connect untuk memulai sesi terminal.</div>
+                <div class="system">Pilih OLT dan klik Connect untuk memulai sesi terminal</div>
             </div>
             <div class="terminal-input-row">
-                <input type="text" id="term-input" placeholder="Enter command..." disabled onkeydown="if(event.key==='Enter')sendCommand()">
+                <span class="terminal-prompt" id="term-prompt">❯</span>
+                <input type="text" id="term-input" placeholder="Enter command..." disabled onkeydown="if(event.key==='Enter')sendCommand()" autocomplete="off" spellcheck="false">
             </div>
         </div>
         <div class="quick-panel">
-            <h3>Quick Ops</h3>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <h3>Quick Ops</h3>
+                <button onclick="addQuickCmd()" style="background:none;border:none;color:#569cd6;font-size:16px;cursor:pointer;padding:0 4px;" title="Add Command">+</button>
+            </div>
             <div class="quick-grid" id="quick-grid"></div>
         </div>
     </div>
@@ -60,22 +87,66 @@
 let socket = null;
 let connected = false;
 
-const QUICK_CMDS = [
-    {id:'init',label:'Init Session',cmds:['enable','config']},
-    {id:'scan',label:'Scan ONT',cmds:['display ont autofind all']},
-    {id:'onts',label:'ONT List',cmds:['interface gpon 0/1','display ont info 0 all']},
-    {id:'board',label:'Board Status',cmds:['display board 0']},
-    {id:'vlan',label:'VLAN List',cmds:['display vlan all']},
-    {id:'save',label:'Save Config',cmds:['save','y']},
-    {id:'ver',label:'Version',cmds:['display version']},
-    {id:'alarm',label:'Alarm List',cmds:['display alarm active all']},
-    {id:'cpu',label:'CPU Load',cmds:['display cpu']},
-    {id:'mem',label:'Memory',cmds:['display memory']},
-];
+let QUICK_CMDS = [];
 
-document.getElementById('quick-grid').innerHTML = QUICK_CMDS.map(c =>
-    '<button class="quick-btn" id="q-'+c.id+'" onclick="runQuick(\''+c.id+'\')" disabled>'+c.label+'</button>'
-).join('');
+async function loadQuickCmds() {
+    const res = await fetch('/api/quick-commands');
+    QUICK_CMDS = await res.json();
+    renderQuickCmds();
+}
+
+function renderQuickCmds() {
+    const grid = document.getElementById('quick-grid');
+    grid.innerHTML = QUICK_CMDS.map(c =>
+        `<div style="display:flex;gap:4px;align-items:stretch;">
+            <button class="quick-btn" id="q-${c.id}" onclick="runQuick('${c.id}')" disabled style="flex:1;">${c.label}</button>
+            <button class="quick-btn" onclick="editQuickCmd('${c.id}')" disabled style="width:28px;padding:4px;font-size:11px;flex:none;" id="qe-${c.id}" title="Edit">✎</button>
+            <button class="quick-btn" onclick="deleteQuickCmd('${c.id}')" disabled style="width:28px;padding:4px;font-size:11px;flex:none;" id="qd-${c.id}" title="Delete">✕</button>
+        </div>`
+    ).join('');
+}
+
+async function editQuickCmd(id) {
+    const cmd = QUICK_CMDS.find(c => c.id === id);
+    if (!cmd) return;
+    const label = prompt('Label:', cmd.label);
+    if (!label) return;
+    const cmdsStr = prompt('Commands (one per line):', cmd.commands.join('\n'));
+    if (!cmdsStr) return;
+    const commands = cmdsStr.split('\n').map(s => s.trim()).filter(Boolean);
+    await fetch('/api/quick-commands/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({label, commands}),
+    });
+    await loadQuickCmds();
+    updateQuickBtnState();
+}
+
+async function deleteQuickCmd(id) {
+    if (!confirm('Hapus command ini?')) return;
+    await fetch('/api/quick-commands/' + id, {method: 'DELETE'});
+    await loadQuickCmds();
+    updateQuickBtnState();
+}
+
+async function addQuickCmd() {
+    const label = prompt('Label for new command:');
+    if (!label) return;
+    const cmdsStr = prompt('Commands (one per line):\n\nContoh:\nenable\nconfig\ndisplay vlan all');
+    if (!cmdsStr) return;
+    const commands = cmdsStr.split('\n').map(s => s.trim()).filter(Boolean);
+    await fetch('/api/quick-commands', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({label, commands}),
+    });
+    await loadQuickCmds();
+    updateQuickBtnState();
+}
+
+document.getElementById('quick-grid').innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:11px;padding:8px;text-align:center;">Loading...</div>';
+loadQuickCmds();
 
 function appendText(text, cls='') {
     const el = document.getElementById('term-output');
@@ -86,12 +157,25 @@ function appendText(text, cls='') {
     el.scrollTop = el.scrollHeight;
 }
 
+function appendOutput(text) {
+    const lines = text.split('\n');
+    for (const line of lines) {
+        const el = document.getElementById('term-output');
+        const div = document.createElement('div');
+        div.className = 'cmd-output';
+        div.textContent = line;
+        el.appendChild(div);
+    }
+    const el = document.getElementById('term-output');
+    el.scrollTop = el.scrollHeight;
+}
+
 function connectTerminal() {
     const sel = document.getElementById('term-olt');
     const opt = sel.options[sel.selectedIndex];
     if (!opt || !opt.value) { toast('Select an OLT first', 'error'); return; }
 
-    appendText('[System] Connecting to ' + opt.dataset.ip + '...', 'system');
+    appendText('Connecting to ' + opt.dataset.ip + '...', 'system');
     document.getElementById('term-status').textContent = 'connecting';
     document.getElementById('term-status').className = 'badge badge-offline';
 
@@ -111,16 +195,16 @@ function connectTerminal() {
         document.getElementById('disconnect-btn').style.display = '';
         document.getElementById('term-input').disabled = false;
         document.getElementById('term-input').focus();
-        document.querySelectorAll('.quick-btn').forEach(b => b.disabled = false);
-        appendText('[System] Connected.', 'system');
+        updateQuickBtnState();
+        appendText('Connected', 'success');
     });
     socket.on('ssh:error', (data) => {
-        appendText('[Error] ' + (data.message || 'Connection failed'), 'error');
+        appendText((data.message || 'Connection failed'), 'error');
         toast('Connection failed', 'error');
         disconnectTerminal();
     });
     socket.on('terminal:data', (data) => {
-        appendText(data);
+        appendOutput(data);
     });
     socket.on('disconnect', () => disconnectTerminal());
 }
@@ -133,8 +217,8 @@ function disconnectTerminal() {
     document.getElementById('connect-btn').style.display = '';
     document.getElementById('disconnect-btn').style.display = 'none';
     document.getElementById('term-input').disabled = true;
-    document.querySelectorAll('.quick-btn').forEach(b => b.disabled = true);
-    appendText('[System] Disconnected.', 'system');
+    updateQuickBtnState();
+    appendText('Disconnected', 'system');
 }
 
 function sendCommand() {
@@ -142,8 +226,13 @@ function sendCommand() {
     const input = document.getElementById('term-input');
     const cmd = input.value;
     if (!cmd) return;
+    appendText('> ' + cmd, 'prompt-line');
     socket.emit('terminal:input', cmd + '\n');
     input.value = '';
+}
+
+function updateQuickBtnState() {
+    document.querySelectorAll('.quick-btn').forEach(b => b.disabled = !connected);
 }
 
 async function runQuick(id) {
@@ -153,12 +242,17 @@ async function runQuick(id) {
     const btn = document.getElementById('q-'+id);
     btn.textContent = '...';
     btn.disabled = true;
-    for (const c of cmd.cmds) {
+    document.getElementById('qe-'+id).disabled = true;
+    document.getElementById('qd-'+id).disabled = true;
+    for (const c of cmd.commands) {
+        appendText('> ' + c, 'prompt-line');
         socket.emit('terminal:input', c + '\n');
         await new Promise(r => setTimeout(r, 1200));
     }
     btn.textContent = cmd.label;
-    btn.disabled = false;
+    btn.disabled = !connected;
+    document.getElementById('qe-'+id).disabled = !connected;
+    document.getElementById('qd-'+id).disabled = !connected;
 }
 </script>
 {% endblock %}
