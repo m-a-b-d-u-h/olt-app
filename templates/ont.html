@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}ONT Management{% endblock %}
 {% block content %}
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 <div class="page-header">
     <div>
         <h2>ONT Management</h2>
@@ -342,8 +343,27 @@ function confirmDelete(ontId, sn, slot, pon, desc, rx, vlan) {
     </div>`;
 }
 
+let isDeleting = false;
+
+function showDeleteLoading() {
+    const c = document.getElementById('modal-container');
+    c.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:320px;text-align:center;">
+        <div class="modal-body" style="padding:32px;">
+          <div style="font-size:32px;margin-bottom:16px;animation:spin 1s linear infinite;">⟳</div>
+          <p style="color:rgba(255,255,255,0.7);font-size:14px;">Menghapus ONT dari OLT...</p>
+          <p style="color:rgba(255,255,255,0.4);font-size:11px;margin-top:8px;">Jangan tinggalkan halaman ini</p>
+        </div>
+      </div>
+    </div>`;
+}
+
 async function doDelete(ontId, sn, slot, pon) {
+    if (isDeleting) return;
+    isDeleting = true;
     closeModal();
+    showDeleteLoading();
     const oltId = document.getElementById('reg-olt').value;
     try {
         const r = await fetch('/api/ont/delete-from-olt', {
@@ -352,11 +372,17 @@ async function doDelete(ontId, sn, slot, pon) {
             body: JSON.stringify({oltId, slot, pon, ontId, sn})
         });
         const d = await r.json();
+        closeModal();
         if (d.status === 'success') {
             toast('ONT deleted from OLT');
             loadRegistered();
         } else { toast('Failed: ' + (d.details || JSON.stringify(d)), 'error'); }
-    } catch (e) { toast('Failed: ' + e.message, 'error'); }
+    } catch (e) {
+        closeModal();
+        toast('Failed: ' + e.message, 'error');
+    } finally {
+        isDeleting = false;
+    }
 }
 
 function closeModal() { document.getElementById('modal-container').innerHTML = ''; }
