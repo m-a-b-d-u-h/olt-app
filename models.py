@@ -46,3 +46,12 @@ class ONT(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (db.UniqueConstraint('olt_id', 'sn', name='uq_olt_sn'),)
+
+class ActivityLog(db.Model):
+    __tablename__ = 'activity_logs'
+    id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    olt_id = db.Column(db.String(36), db.ForeignKey('olts.id'), nullable=True)
+    olt_name = db.Column(db.String(100), default='')
+    action = db.Column(db.String(32), nullable=False)
+    description = db.Column(db.String(512), default='')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))

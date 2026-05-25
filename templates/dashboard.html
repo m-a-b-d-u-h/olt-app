@@ -23,8 +23,24 @@
     <div class="card-header">
         <h3>Recent Activities</h3>
     </div>
-    <div class="card-body text-muted text-sm" style="font-style:italic;">
-        No recent activities found.
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Time</th><th>OLT</th><th>Action</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                {% for a in activities %}
+                <tr>
+                    <td class="monospace text-sm text-muted">{{ a.created_at.strftime('%H:%M %d/%m') if a.created_at else '' }}</td>
+                    <td>{{ a.olt_name }}</td>
+                    <td><span class="badge badge-registered">{{ a.action }}</span></td>
+                    <td class="text-sm">{{ a.description }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted text-sm" style="padding:40px;text-align:center;font-style:italic;">No activities recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 

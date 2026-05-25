@@ -5,8 +5,18 @@ import time
 import socket
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
-from models import db, OLT, ONT, QuickCommand, gen_uuid
+from models import db, OLT, ONT, QuickCommand, ActivityLog, gen_uuid
+from datetime import datetime, timezone
 import olt_service
+
+
+def log_activity(olt_id, olt_name, action, description):
+    try:
+        log = ActivityLog(olt_id=olt_id, olt_name=olt_name, action=action, description=description)
+        db.session.add(log)
+        db.session.commit()
+    except:
+        db.session.rollback()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24).hex()
@@ -27,7 +37,17 @@ with app.app_context():
 def dashboard():
     olts = OLT.query.all()
     onts = ONT.query.all()
-    return render_template('dashboard.html', olts=olts, onts=onts)
+    activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(20).all()
+    return render_template('dashboard.html', olts=olts, onts=onts, activities=activities)
+
+@app.route('/api/activities')
+def api_activities():
+    logs = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(50).all()
+    return jsonify([{
+        'id': l.id, 'olt_name': l.olt_name, 'action': l.action,
+        'description': l.description,
+        'created_at': l.created_at.isoformat() if l.created_at else '',
+    } for l in logs])
 
 @app.route('/olt')
 def olt_list():
@@ -208,35 +228,6 @@ def api_ont_delete(ont_id):
     db.session.commit()
     return jsonify({'status': 'ok'})
 
-@app.route('/api/ont/provision', methods=['POST'])
-def api_ont_provision():
-    data = request.json
-    olt = OLT.query.get_or_404(data.get('oltId') or data.get('olt_id'))
-    result = olt_service.provision_ont(
-        olt, data['slot'], data['pon'], data['sn'], data['vlan'],
-        data.get('nama', ''), data.get('alamat', ''),
-        data.get('pppoe_user', ''), data.get('pppoe_pass', ''),
-        data.get('additional_vlans', ''), data.get('use_tr069', False),
-        data.get('tr069_profile', 'acs'),
-    )
-    if result['status'] == 'success':
-        extra_arr = [v.strip() for v in data.get('additional_vlans', '').split(',') if v.strip()]
-        if data.get('use_tr069') and '100' not in extra_arr:
-            extra_arr.append('100')
-        all_vlans = ','.join(filter(None, [data['vlan']] + extra_arr))
-        try:
-            ont = ONT(
-                olt_id=data['olt_id'], sn=data['sn'],
-                slot=data['slot'], pon=data['pon'], ont_id=result['ont_id'],
-                name=data.get('nama', ''), address=data.get('alamat', ''),
-                vlan=data['vlan'], vlan_ids=all_vlans, status='registered',
-            )
-            db.session.add(ont)
-            db.session.commit()
-        except Exception as e:
-            print(f'DB Error: {e}')
-    return jsonify(result)
-
 @app.route('/api/ont/sync', methods=['POST'])
 def api_ont_sync():
     data = request.json
@@ -272,9 +263,28 @@ def api_ont_sync():
             results.append(ont)
         if not results:
             return jsonify({'error': 'No registered ONTs found', 'raw': raw_output}), 200
+        log_activity(olt.id, olt.name, 'sync', f'{len(results)} ONTs slot {data["slot"]}/{data["pon"]}')
         return jsonify(results)
     except Exception as e:
         return jsonify({'error': str(e), 'details': str(e)}), 500
+
+@app.route('/api/ont/provision', methods=['POST'])
+def api_ont_provision():
+    data = request.json
+    olt = OLT.query.get_or_404(data.get('oltId') or data.get('olt_id'))
+    try:
+        result = olt_service.provision_ont(
+            olt, data['slot'], data['pon'], data['sn'], data['vlan'],
+            data.get('nama', ''), data.get('alamat', ''),
+            data.get('pppoe_user', ''), data.get('pppoe_pass', ''),
+            data.get('additional_vlans', ''), data.get('use_tr069', False),
+            data.get('tr069_profile', 'acs'),
+        )
+        if result.get('status') == 'success':
+            log_activity(olt.id, olt.name, 'provision', f'ONT {result["ont_id"]} - {data.get("nama", "")}')
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/ont/delete-from-olt', methods=['POST'])
 def api_ont_delete_from_olt():
@@ -292,6 +302,7 @@ def api_ont_delete_from_olt():
             ONT.query.filter_by(olt_id=data['oltId'], slot=data['slot'],
                                 pon=data['pon'], ont_id=data['ontId']).delete()
             db.session.commit()
+        log_activity(olt.id, olt.name, 'delete', f'ONT ID {data["ontId"]} SN {data.get("sn", "")}')
         return jsonify({'status': 'success'})
     except Exception as e:
         return jsonify({'error': str(e), 'details': str(e)}), 500
@@ -365,6 +376,8 @@ def api_ont_tr069():
     olt = OLT.query.get_or_404(data['oltId'])
     try:
         result = olt_service.configure_tr069(olt, data['slot'], data['pon'], data['ontId'], data.get('profile', 'acs'))
+        if result.get('status') == 'success':
+            log_activity(olt.id, olt.name, 'tr069', f'ONT ID {data["ontId"]} profile {result.get("profile", "acs")}')
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e), 'details': str(e)}), 500
