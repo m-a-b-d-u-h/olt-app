@@ -1,10 +1,11 @@
 import os
 import re
+import json
 import time
 import socket
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
-from models import db, OLT, ONT, gen_uuid
+from models import db, OLT, ONT, QuickCommand, gen_uuid
 import olt_service
 
 app = Flask(__name__)
@@ -17,6 +18,10 @@ socketio = SocketIO(app, cors_allowed_origins='*', ping_timeout=60, ping_interva
 
 with app.app_context():
     db.create_all()
+    if not QuickCommand.query.first():
+        db.session.add(QuickCommand(label='Init Session', commands=json.dumps(['enable', 'config'])))
+        db.session.add(QuickCommand(label='Scan ONT', commands=json.dumps(['display ont autofind all'])))
+        db.session.commit()
 
 @app.route('/')
 def dashboard():
@@ -264,6 +269,8 @@ def api_ont_sync():
             except Exception as e:
                 print(f'Sync DB Error: {e}')
             results.append(ont)
+        if not results:
+            return jsonify({'error': 'No registered ONTs found', 'raw': raw_output}), 200
         return jsonify(results)
     except Exception as e:
         return jsonify({'error': str(e), 'details': str(e)}), 500
@@ -360,6 +367,40 @@ def api_ont_tr069():
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e), 'details': str(e)}), 500
+
+@app.route('/api/quick-commands', methods=['GET'])
+def api_quick_commands_list():
+    cmds = QuickCommand.query.order_by(QuickCommand.created_at).all()
+    return jsonify([{
+        'id': c.id, 'label': c.label,
+        'commands': json.loads(c.commands),
+    } for c in cmds])
+
+@app.route('/api/quick-commands', methods=['POST'])
+def api_quick_commands_create():
+    data = request.json
+    qc = QuickCommand(label=data['label'], commands=json.dumps(data['commands']))
+    db.session.add(qc)
+    db.session.commit()
+    return jsonify({'id': qc.id}), 201
+
+@app.route('/api/quick-commands/<cmd_id>', methods=['PUT'])
+def api_quick_commands_update(cmd_id):
+    qc = QuickCommand.query.get_or_404(cmd_id)
+    data = request.json
+    if 'label' in data:
+        qc.label = data['label']
+    if 'commands' in data:
+        qc.commands = json.dumps(data['commands'])
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+@app.route('/api/quick-commands/<cmd_id>', methods=['DELETE'])
+def api_quick_commands_delete(cmd_id):
+    qc = QuickCommand.query.get_or_404(cmd_id)
+    db.session.delete(qc)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
 
 # ========== WebSocket Terminal ==========
 active_connections = {}
