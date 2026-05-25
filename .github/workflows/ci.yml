@@ -20,6 +20,6 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd /home/olt/olt-app
-            git pull origin main
+            git pull origin master
             ./setup.sh
             sudo systemctl restart olt-app
