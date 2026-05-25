@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Terminal{% endblock %}
+{% block content %}
+<style>
+.terminal-wrapper { display:flex; flex-direction:column; height:calc(100vh - 90px); margin:-24px -32px; }
+.terminal-header { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#0f0f0f; border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0; }
+.terminal-body { flex:1; display:flex; overflow:hidden; }
+.terminal-screen { flex:1; background:#0a0a0a; display:flex; flex-direction:column; }
+.terminal-output { flex:1; overflow-y:auto; padding:12px; font-family:'SF Mono','Fira Code',monospace; font-size:13px; line-height:1.5; color:#e2e8f0; background:#0a0a0a; }
+.terminal-output .prompt { color:#60a5fa; }
+.terminal-output .system { color:rgba(255,255,255,0.4); font-style:italic; }
+.terminal-output .error { color:#f87171; }
+.terminal-input-row { display:flex; padding:8px 12px; background:#0a0a0a; border-top:1px solid rgba(255,255,255,0.05); flex-shrink:0; }
+.terminal-input-row input { flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:8px 12px; color:#e2e8f0; font-family:'SF Mono','Fira Code',monospace; font-size:13px; outline:none; }
+.terminal-input-row input:focus { border-color:#3b82f6; }
+.quick-panel { width:280px; background:#0f0f0f; border-left:1px solid rgba(255,255,255,0.1); padding:12px; overflow-y:auto; flex-shrink:0; }
+.quick-panel h3 { font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.3); font-weight:700; margin-bottom:12px; }
+.quick-grid { display:flex; flex-direction:column; gap:4px; }
+.quick-btn { display:flex; align-items:center; justify-content:space-between; padding:6px 10px; border-radius:6px; border:none; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; cursor:pointer; transition:all 0.2s; width:100%; text-align:left; }
+.quick-btn:not(:disabled) { background:#e2e8f0; color:#0f172a; }
+.quick-btn:not(:disabled):hover { background:#cbd5e1; }
+.quick-btn:disabled { background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.15); cursor:not-allowed; }
+@media(max-width:768px){ .quick-panel { display:none; } .terminal-wrapper { margin:-16px; height:calc(100vh - 60px); } }
+</style>
+
+<div class="terminal-wrapper">
+    <div class="terminal-header">
+        <div class="flex items-center gap-2">
+            <select id="term-olt" class="form-control" style="width:auto;min-width:180px;font-size:11px;padding:4px 8px;">
+                <option value="">-- Select OLT --</option>
+                {% for olt in olts %}
+                <option value="{{ olt.id }}" data-ip="{{ olt.ip }}" data-user="{{ olt.username }}" data-pass="{{ olt.password }}">{{ olt.name }}</option>
+                {% endfor %}
+            </select>
+            <span class="badge badge-offline" id="term-status">disconnected</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button class="btn btn-primary btn-sm" onclick="connectTerminal()" id="connect-btn">Connect</button>
+            <button class="btn btn-secondary btn-sm" onclick="disconnectTerminal()" id="disconnect-btn" style="display:none;">Disconnect</button>
+        </div>
+    </div>
+    <div class="terminal-body">
+        <div class="terminal-screen">
+            <div class="terminal-output" id="term-output">
+                <div class="system">[System] Pilih OLT dan klik Connect untuk memulai sesi terminal.</div>
+            </div>
+            <div class="terminal-input-row">
+                <input type="text" id="term-input" placeholder="Enter command..." disabled onkeydown="if(event.key==='Enter')sendCommand()">
+            </div>
+        </div>
+        <div class="quick-panel">
+            <h3>Quick Ops</h3>
+            <div class="quick-grid" id="quick-grid"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let socket = null;
+let connected = false;
+
+const QUICK_CMDS = [
+    {id:'init',label:'Init Session',cmds:['enable','config','terminal length 0']},
+    {id:'scan',label:'Scan ONT',cmds:['display ont autofind all']},
+    {id:'onts',label:'ONT List',cmds:['display ont info 0 0 all']},
+    {id:'board',label:'Board Status',cmds:['display board 0']},
+    {id:'vlan',label:'VLAN List',cmds:['display vlan all']},
+    {id:'save',label:'Save Config',cmds:['save','y']},
+    {id:'ver',label:'Version',cmds:['display version']},
+    {id:'alarm',label:'Alarm List',cmds:['display alarm active all']},
+    {id:'cpu',label:'CPU Load',cmds:['display cpu']},
+    {id:'mem',label:'Memory',cmds:['display memory']},
+];
+
+document.getElementById('quick-grid').innerHTML = QUICK_CMDS.map(c =>
+    '<button class="quick-btn" id="q-'+c.id+'" onclick="runQuick(\''+c.id+'\')" disabled>'+c.label+'</button>'
+).join('');
+
+function appendText(text, cls='') {
+    const el = document.getElementById('term-output');
+    const div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = text;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+}
+
+function connectTerminal() {
+    const sel = document.getElementById('term-olt');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) { toast('Select an OLT first', 'error'); return; }
+
+    appendText('[System] Connecting to ' + opt.dataset.ip + '...', 'system');
+    document.getElementById('term-status').textContent = 'connecting';
+    document.getElementById('term-status').className = 'badge badge-offline';
+
+    socket = io();
+    socket.on('connect', () => {
+        socket.emit('ssh:connect', {
+            host: opt.dataset.ip,
+            username: opt.dataset.user,
+            password: opt.dataset.pass
+        });
+    });
+    socket.on('ssh:connected', () => {
+        connected = true;
+        document.getElementById('term-status').textContent = 'connected';
+        document.getElementById('term-status').className = 'badge badge-online';
+        document.getElementById('connect-btn').style.display = 'none';
+        document.getElementById('disconnect-btn').style.display = '';
+        document.getElementById('term-input').disabled = false;
+        document.getElementById('term-input').focus();
+        document.querySelectorAll('.quick-btn').forEach(b => b.disabled = false);
+        appendText('[System] Connected.', 'system');
+    });
+    socket.on('ssh:error', (data) => {
+        appendText('[Error] ' + (data.message || 'Connection failed'), 'error');
+        toast('Connection failed', 'error');
+        disconnectTerminal();
+    });
+    socket.on('terminal:data', (data) => {
+        appendText(data);
+    });
+    socket.on('disconnect', () => disconnectTerminal());
+}
+
+function disconnectTerminal() {
+    if (socket) { socket.disconnect(); socket = null; }
+    connected = false;
+    document.getElementById('term-status').textContent = 'disconnected';
+    document.getElementById('term-status').className = 'badge badge-offline';
+    document.getElementById('connect-btn').style.display = '';
+    document.getElementById('disconnect-btn').style.display = 'none';
+    document.getElementById('term-input').disabled = true;
+    document.querySelectorAll('.quick-btn').forEach(b => b.disabled = true);
+    appendText('[System] Disconnected.', 'system');
+}
+
+function sendCommand() {
+    if (!connected || !socket) return;
+    const input = document.getElementById('term-input');
+    const cmd = input.value;
+    if (!cmd) return;
+    socket.emit('terminal:input', cmd + '\n');
+    input.value = '';
+}
+
+async function runQuick(id) {
+    if (!connected || !socket) return;
+    const cmd = QUICK_CMDS.find(c => c.id === id);
+    if (!cmd) return;
+    const btn = document.getElementById('q-'+id);
+    btn.textContent = '...';
+    btn.disabled = true;
+    for (const c of cmd.cmds) {
+        socket.emit('terminal:input', c + '\n');
+        await new Promise(r => setTimeout(r, 1200));
+    }
+    btn.textContent = cmd.label;
+    btn.disabled = false;
+}
+</script>
+{% endblock %}

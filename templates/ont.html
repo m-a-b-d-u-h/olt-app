@@ -1,0 +1,506 @@
+{% extends "base.html" %}
+{% block title %}ONT Management{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>ONT Management</h2>
+    </div>
+</div>
+
+<div class="tabs" id="tabs">
+    <button class="tab active" data-tab="registered" onclick="switchTab('registered')">Registered ONTs</button>
+    <button class="tab" data-tab="provision" onclick="switchTab('provision')">Provisioning</button>
+</div>
+
+<div id="tab-registered">
+    <div class="card mb-4">
+        <div class="card-header"><h3>Registered ONTs</h3></div>
+        <div class="card-body">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>OLT</label>
+                    <select id="reg-olt" class="form-control" onchange="loadRegistered()">
+                        <option value="">-- Select OLT --</option>
+                        {% for olt in olts %}
+                        <option value="{{ olt.id }}">{{ olt.name }} ({{ olt.ip }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Slot (filter)</label>
+                    <select id="reg-slot" class="form-control" onchange="loadRegistered()">
+                        <option value="">-- All Slots --</option>
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>PON Port (filter)</label>
+                    <select id="reg-pon" class="form-control" onchange="loadRegistered()">
+                        <option value="">-- All PONs --</option>
+                        {% for p in range(16) %}
+                        <option value="{{ p }}">{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="display:flex;align-items:flex-end;">
+                    <button class="btn btn-primary w-full" onclick="syncFromOlt()" id="sync-btn">Sync from OLT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="sync-loading" style="display:none;" class="card">
+        <div class="card-body" style="text-align:center;padding:40px;">
+            <div style="font-size:14px;color:rgba(255,255,255,0.5);">Syncing ONTs from OLT via SSH...</div>
+        </div>
+    </div>
+
+    <div class="card" id="ont-table-card" style="display:none;">
+        <div class="card-header">
+            <span class="text-muted text-sm" id="ont-count">0 total ONTs</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ONT ID</th><th>SN</th><th>Slot/PON</th>
+                        <th>Description</th><th>VLAN</th><th>Status</th>
+                        <th>RX Power</th><th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="ont-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="ont-empty" class="card" style="display:none;">
+        <div class="card-body text-muted text-sm" style="text-align:center;padding:40px;font-style:italic;">
+            Belum ada ONT terdaftar. Pilih OLT, Slot & PON lalu klik "Sync from OLT".
+        </div>
+    </div>
+</div>
+
+<div id="tab-provision" style="display:none;">
+    <div class="card mb-4">
+        <div class="card-header"><h3>Step 1: Select OLT</h3></div>
+        <div class="card-body">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>OLT</label>
+                    <select id="prov-olt" class="form-control" onchange="resetProvision()">
+                        <option value="">-- Select OLT --</option>
+                        {% for olt in olts %}
+                        <option value="{{ olt.id }}">{{ olt.name }} ({{ olt.ip }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="display:flex;align-items:flex-end;">
+                    <button class="btn btn-primary w-full" onclick="scanOnts()" id="scan-btn">Scan Unregistered ONTs</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="scan-results" style="display:none;">
+        <div class="card-header"><h3>Step 2: Select ONT to Provision</h3></div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>SN</th><th>Slot</th><th>PON</th><th>Action</th></tr></thead>
+                <tbody id="scan-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card" id="provision-form" style="display:none;">
+        <div class="card-header"><h3>Step 3: Provision ONT</h3></div>
+        <div class="card-body">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>ONT SN</label>
+                    <input id="p-sn" class="form-control" disabled>
+                </div>
+                <div class="form-group">
+                    <label>Slot/PON</label>
+                    <input id="p-slotpon" class="form-control" disabled>
+                </div>
+                <div class="form-group">
+                    <label>VLAN</label>
+                    <select id="p-vlan" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                    <label>Customer Name</label>
+                    <input id="p-nama" class="form-control" placeholder="Muhammad Ali">
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <input id="p-alamat" class="form-control" placeholder="Trimoharjo">
+                </div>
+                <div class="form-group">
+                    <label>Additional VLANs</label>
+                    <input id="p-extra-vlans" class="form-control" placeholder="e.g. 221,222,227">
+                </div>
+            </div>
+            <div class="form-row mb-4">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="p-tr069" onchange="toggleTr069()"> TR069 (VLAN 100)
+                </label>
+                <select id="p-tr069-profile" class="form-control" style="width:auto;display:none;">
+                    <option value="acs">acs</option>
+                    <option value="acs-billing">acs-billing</option>
+                </select>
+            </div>
+            <div class="form-row mb-4">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="p-pppoe" onchange="togglePppoe()"> PPPoE
+                </label>
+            </div>
+            <div id="pppoe-fields" style="display:none;" class="form-grid mb-4">
+                <div class="form-group">
+                    <label>PPPoE Username</label>
+                    <input id="p-pppoe-user" class="form-control" placeholder="pppoe username">
+                </div>
+                <div class="form-group">
+                    <label>PPPoE Password</label>
+                    <input id="p-pppoe-pass" type="password" class="form-control" placeholder="pppoe password">
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="provisionOnt()" id="prov-btn">Provision ONT</button>
+        </div>
+    </div>
+
+    <div id="provision-result" style="display:none;" class="card mb-4"></div>
+
+    <div id="tr069-section" style="display:none;" class="card">
+        <div class="card-header"><h3>Configure TR069</h3></div>
+        <div class="card-body">
+            <p class="text-sm text-muted" id="tr069-info"></p>
+            <div class="form-row mt-2">
+                <select id="tr069-profile-2" class="form-control" style="width:auto;">
+                    <option value="acs">acs</option>
+                    <option value="acs-billing">acs-billing</option>
+                </select>
+                <button class="btn btn-primary btn-sm" onclick="configureTr069()">Push TR069 Config</button>
+            </div>
+            <div id="tr069-result" class="mt-2"></div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+// ========== Tab switching ==========
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+    });
+    document.getElementById('tab-registered').style.display = tab === 'registered' ? '' : 'none';
+    document.getElementById('tab-provision').style.display = tab === 'provision' ? '' : 'none';
+}
+
+// ========== VLAN list ==========
+let vlanList = [];
+fetch('/api/ont/vlans').then(r => r.json()).then(v => {
+    vlanList = v;
+    const sel = document.getElementById('p-vlan');
+    sel.innerHTML = '<option value="">-- Select VLAN --</option>' + v.map(vv => '<option value="'+vv+'">VLAN '+vv+'</option>').join('');
+});
+
+// ========== Registered ONTs ==========
+let currentOnts = [];
+
+function loadRegistered() {
+    const olt = document.getElementById('reg-olt').value;
+    if (!olt) { hideRegistered(); return; }
+    fetch('/api/ont/by-olt/' + olt).then(r => r.json()).then(data => {
+        currentOnts = data;
+        renderRegistered(data);
+    }).catch(() => hideRegistered());
+}
+
+function renderRegistered(data) {
+    const slot = document.getElementById('reg-slot').value;
+    const pon = document.getElementById('reg-pon').value;
+    let filtered = data;
+    if (slot) filtered = filtered.filter(o => o.slot === slot);
+    if (pon) filtered = filtered.filter(o => o.pon === pon);
+
+    document.getElementById('ont-count').textContent = data.length + ' total ONT' + (data.length !== 1 ? 's' : '') +
+        ((slot || pon) ? ' (filtered to ' + filtered.length + ')' : '');
+
+    const tb = document.getElementById('ont-tbody');
+    if (filtered.length === 0) {
+        tb.innerHTML = '';
+        document.getElementById('ont-table-card').style.display = 'none';
+        document.getElementById('ont-empty').style.display = '';
+        document.getElementById('ont-empty').querySelector('.card-body').textContent =
+            data.length === 0 ? 'Belum ada ONT terdaftar di database. Pilih Slot & PON lalu klik "Sync from OLT".' : 'Tidak ada ONT yang cocok dengan filter.';
+        return;
+    }
+    document.getElementById('ont-table-card').style.display = '';
+    document.getElementById('ont-empty').style.display = 'none';
+    tb.innerHTML = filtered.map(o => {
+        const rx = o.rx_power ? parseFloat(o.rx_power) : null;
+        return '<tr>' +
+            '<td class="monospace">' + (o.ont_id ?? '') + '</td>' +
+            '<td class="monospace text-blue text-sm">' + o.sn + '</td>' +
+            '<td>' + o.slot + '/' + o.pon + '</td>' +
+            '<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;">' + (o.description || '-') + '</td>' +
+            '<td class="monospace text-sm">' + (o.vlan || '-') + '</td>' +
+            '<td><span class="badge ' + (o.status === 'online' ? 'badge-online' : 'badge-unknown') + '">' + o.status + '</span></td>' +
+            '<td class="monospace text-sm ' + (rx && rx < -25 ? 'text-red' : (rx ? 'text-green' : '')) + '">' + (o.rx_power || '-') + '</td>' +
+            '<td><button class="btn btn-danger btn-xs" onclick="confirmDelete(' + o.ont_id + ',\'' + o.sn + '\',\'' + o.slot + '\',\'' + o.pon + '\',\'' + (o.description || '') + '\',\'' + (o.rx_power || '') + '\',\'' + (o.vlan || '') + '\')">Delete</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+function hideRegistered() {
+    document.getElementById('ont-table-card').style.display = 'none';
+    document.getElementById('ont-empty').style.display = 'none';
+}
+
+async function syncFromOlt() {
+    const oltId = document.getElementById('reg-olt').value;
+    const slot = document.getElementById('reg-slot').value;
+    const pon = document.getElementById('reg-pon').value;
+    if (!oltId || !slot || !pon) { toast('Fill OLT, Slot, and PON first', 'error'); return; }
+
+    const btn = document.getElementById('sync-btn');
+    btn.disabled = true; btn.textContent = 'Syncing...';
+    document.getElementById('sync-loading').style.display = '';
+
+    try {
+        const r = await fetch('/api/ont/sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({oltId, slot, pon})
+        });
+        const d = await r.json();
+        if (d.error) { toast('Sync failed: ' + d.details || d.error, 'error'); }
+        else {
+            toast(d.length === 0 ? 'No registered ONTs found on this port' : 'Synced ' + d.length + ' ONT(s) from OLT');
+            loadRegistered();
+        }
+    } catch (e) { toast('Sync failed: ' + e.message, 'error'); }
+    finally {
+        btn.disabled = false; btn.textContent = 'Sync from OLT';
+        document.getElementById('sync-loading').style.display = 'none';
+    }
+}
+
+function confirmDelete(ontId, sn, slot, pon, desc, rx, vlan) {
+    const rxNum = rx ? parseFloat(rx) : null;
+    const c = document.getElementById('modal-container');
+    c.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="max-width:420px;border-color:rgba(220,38,38,0.3);">
+        <div class="modal-header">
+          <h3 style="color:#f87171;">Konfirmasi Hapus ONT</h3>
+          <button class="btn btn-secondary btn-sm" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="text-sm text-muted" style="margin-bottom:16px;">Tindakan ini akan mengirim perintah ke OLT</p>
+          <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:16px;font-family:monospace;font-size:12px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span class="text-muted">ONT ID</span><span style="color:#f87171;font-weight:700;">${ontId}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span class="text-muted">SN</span><span class="text-blue">${sn}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span class="text-muted">Slot/PON</span><span>${slot}/${pon}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span class="text-muted">Pelanggan</span><span>${desc || '-'}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span class="text-muted">VLAN</span><span>${vlan || '-'}</span>
+            </div>
+            ${rx ? '<div style="display:flex;justify-content:space-between;"><span class="text-muted">RX Power</span><span class="'+(rxNum<-25?'text-red':'text-green')+'">'+rx+'</span></div>' : ''}
+          </div>
+          <p class="text-sm" style="color:rgba(248,113,113,0.7);margin-top:16px;text-align:center;">
+            Perintah akan dikirim ke OLT via SSH. Permanent setelah <code>save</code>.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal()">Batal</button>
+          <button class="btn btn-danger" onclick="doDelete(${ontId},'${sn}','${slot}','${pon}')">Ya, Hapus ONT</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function doDelete(ontId, sn, slot, pon) {
+    closeModal();
+    const oltId = document.getElementById('reg-olt').value;
+    try {
+        const r = await fetch('/api/ont/delete-from-olt', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({oltId, slot, pon, ontId, sn})
+        });
+        const d = await r.json();
+        if (d.status === 'success') {
+            toast('ONT deleted from OLT');
+            loadRegistered();
+        } else { toast('Failed: ' + (d.details || JSON.stringify(d)), 'error'); }
+    } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+function closeModal() { document.getElementById('modal-container').innerHTML = ''; }
+
+// ========== Provisioning ==========
+let selectedOnt = null;
+let lastProvisionedOnt = null;
+
+function resetProvision() {
+    selectedOnt = null;
+    lastProvisionedOnt = null;
+    document.getElementById('scan-results').style.display = 'none';
+    document.getElementById('provision-form').style.display = 'none';
+    document.getElementById('provision-result').style.display = 'none';
+    document.getElementById('tr069-section').style.display = 'none';
+}
+
+async function scanOnts() {
+    const oltId = document.getElementById('prov-olt').value;
+    if (!oltId) { toast('Select an OLT first', 'error'); return; }
+    resetProvision();
+    const btn = document.getElementById('scan-btn');
+    btn.disabled = true; btn.textContent = 'Scanning...';
+    try {
+        const r = await fetch('/api/ont/scan/' + oltId);
+        const d = await r.json();
+        if (d.error) { toast('Scan failed: ' + (d.details || d.error), 'error'); return; }
+        if (d.length === 0) { toast('No unregistered ONTs found'); return; }
+        toast('Found ' + d.length + ' unregistered ONT(s)');
+        const tb = document.getElementById('scan-tbody');
+        tb.innerHTML = d.map((o, i) => '<tr>' +
+            '<td class="monospace text-blue text-sm">' + o.sn + '</td>' +
+            '<td>' + o.slot + '</td><td>' + o.pon + '</td>' +
+            '<td><button class="btn ' + (i === 0 ? 'btn-primary' : 'btn-secondary') + ' btn-xs" onclick="selectOnt(' + i + ')">Select</button></td>' +
+            '</tr>').join('');
+        document.getElementById('scan-results').style.display = '';
+        window._scanData = d;
+    } catch (e) { toast('Scan failed: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Scan Unregistered ONTs'; }
+}
+
+function selectOnt(idx) {
+    const d = window._scanData;
+    if (!d) return;
+    selectedOnt = d[idx];
+    document.getElementById('p-sn').value = selectedOnt.sn;
+    document.getElementById('p-slotpon').value = selectedOnt.slot + '/' + selectedOnt.pon;
+    document.getElementById('provision-form').style.display = '';
+    document.getElementById('provision-result').style.display = 'none';
+    document.getElementById('tr069-section').style.display = 'none';
+    document.getElementById('prov-btn').textContent = 'Provision ONT';
+    document.getElementById('prov-btn').disabled = false;
+    document.querySelectorAll('#scan-tbody button').forEach(b => {
+        b.className = 'btn btn-secondary btn-xs';
+    });
+    event.target.className = 'btn btn-primary btn-xs';
+}
+
+function toggleTr069() {
+    document.getElementById('p-tr069-profile').style.display = document.getElementById('p-tr069').checked ? '' : 'none';
+}
+
+function togglePppoe() {
+    document.getElementById('pppoe-fields').style.display = document.getElementById('p-pppoe').checked ? '' : 'none';
+}
+
+async function provisionOnt() {
+    if (!selectedOnt) { toast('Select an ONT first', 'error'); return; }
+    const vlan = document.getElementById('p-vlan').value;
+    const nama = document.getElementById('p-nama').value;
+    if (!vlan || !nama) { toast('Select VLAN and fill Name', 'error'); return; }
+
+    const btn = document.getElementById('prov-btn');
+    btn.disabled = true; btn.textContent = 'Provisioning...';
+
+    const data = {
+        oltId: document.getElementById('prov-olt').value,
+        slot: selectedOnt.slot, pon: selectedOnt.pon, sn: selectedOnt.sn,
+        vlan, nama, alamat: document.getElementById('p-alamat').value,
+        pppoe_user: document.getElementById('p-pppoe').checked ? document.getElementById('p-pppoe-user').value : '',
+        pppoe_pass: document.getElementById('p-pppoe').checked ? document.getElementById('p-pppoe-pass').value : '',
+        additional_vlans: document.getElementById('p-extra-vlans').value,
+        use_tr069: document.getElementById('p-tr069').checked,
+        tr069_profile: document.getElementById('p-tr069-profile').value,
+    };
+
+    try {
+        const r = await fetch('/api/ont/provision', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const d = await r.json();
+        const el = document.getElementById('provision-result');
+        if (d.status === 'success') {
+            el.style.display = '';
+            el.innerHTML = '<div class="card-body"><strong style="color:#34d399;">Provision Successful</strong><pre class="mt-2">ONT ID: ' + d.ont_id + (d.tr069 ? '\nTR069: enabled' : '') + '</pre></div>';
+            toast('ONT provisioned! ID: ' + d.ont_id);
+            lastProvisionedOnt = {
+                oltId: data.oltId, slot: selectedOnt.slot, pon: selectedOnt.pon,
+                ontId: d.ont_id, sn: selectedOnt.sn, tr069: d.tr069
+            };
+            if (d.tr069) showTr069Section();
+            selectedOnt = null;
+            document.getElementById('p-nama').value = '';
+            document.getElementById('p-alamat').value = '';
+        } else {
+            el.style.display = '';
+            el.innerHTML = '<div class="card-body"><strong style="color:#f87171;">Provision Failed</strong><pre class="mt-2">' + (d.raw_output || d.log || 'Unknown error') + '</pre></div>';
+            toast('Provision failed', 'error');
+        }
+    } catch (e) {
+        toast('Provision failed: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Provision ONT';
+    }
+}
+
+function showTr069Section() {
+    if (!lastProvisionedOnt) return;
+    const el = document.getElementById('tr069-section');
+    el.style.display = '';
+    document.getElementById('tr069-info').textContent =
+        'ONT ID: ' + lastProvisionedOnt.ontId + ' | SN: ' + lastProvisionedOnt.sn + ' | Slot/PON: ' + lastProvisionedOnt.slot + '/' + lastProvisionedOnt.pon;
+}
+
+async function configureTr069() {
+    if (!lastProvisionedOnt) return;
+    const data = {
+        oltId: lastProvisionedOnt.oltId,
+        slot: lastProvisionedOnt.slot,
+        pon: lastProvisionedOnt.pon,
+        ontId: lastProvisionedOnt.ontId,
+        profile: document.getElementById('tr069-profile-2').value,
+    };
+    const btn = event.target;
+    btn.disabled = true; btn.textContent = 'Configuring...';
+    try {
+        const r = await fetch('/api/ont/tr069-config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const d = await r.json();
+        const el = document.getElementById('tr069-result');
+        if (d.status === 'success') {
+            el.innerHTML = '<div class="badge badge-online">TR069 ' + d.profile + ' configured</div>';
+            toast('TR069 configured (' + d.profile + ')');
+        } else {
+            el.innerHTML = '<span class="text-red">' + (d.log || 'Failed') + '</span>';
+            toast('TR069 failed', 'error');
+        }
+    } catch (e) { toast('TR069 failed: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Push TR069 Config'; }
+}
+</script>
+{% endblock %}

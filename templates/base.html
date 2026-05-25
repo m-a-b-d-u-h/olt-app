@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}OLT App{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <h1>OLT Master</h1>
+        <nav>
+            <a href="/" class="{% if not request.path.startswith('/olt') and not request.path.startswith('/ont') and not request.path.startswith('/terminal') %}active{% endif %}">Dashboard</a>
+            <a href="/olt" class="{% if request.path.startswith('/olt') %}active{% endif %}">OLT List</a>
+            <a href="/ont" class="{% if request.path.startswith('/ont') %}active{% endif %}">ONT Provision</a>
+            <a href="/terminal" class="{% if request.path.startswith('/terminal') %}active{% endif %}">Terminal</a>
+        </nav>
+        <div class="version">v1.0.0 Flask</div>
+    </aside>
+    <div class="main">
+        <div class="content">
+            <div class="toast" id="toast-container"></div>
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</div>
+
+<nav class="bottom-nav">
+    <a href="/" class="{% if not request.path.startswith('/olt') and not request.path.startswith('/ont') and not request.path.startswith('/terminal') %}active{% endif %}">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Home</span>
+    </a>
+    <a href="/olt" class="{% if request.path.startswith('/olt') %}active{% endif %}">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span>OLT</span>
+    </a>
+    <a href="/ont" class="{% if request.path.startswith('/ont') %}active{% endif %}">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span>ONT</span>
+    </a>
+    <a href="/terminal" class="{% if request.path.startswith('/terminal') %}active{% endif %}">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span>Terminal</span>
+    </a>
+</nav>
+<script>
+function toast(msg, type='success') {
+    const c = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = 'toast-msg toast-' + type;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => el.remove(), 5000);
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

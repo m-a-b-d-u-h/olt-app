@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}OLT Management{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>OLT Management</h2>
+        <p>Configure and monitor your Optical Line Terminals.</p>
+    </div>
+    <button class="btn btn-primary" onclick="showModal('/olt/create')">+ Add OLT</button>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="text-muted text-sm">Showing {{ olts|length }} Terminals</div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Name</th><th>IP Address</th><th>Vendor</th><th>ONT Count</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                {% for olt in olts %}
+                <tr>
+                    <td><strong>{{ olt.name }}</strong><br><span class="text-muted text-sm">{{ olt.username }}</span></td>
+                    <td class="monospace text-blue">{{ olt.ip }}</td>
+                    <td><span class="badge badge-registered">{{ olt.type }}</span></td>
+                    <td>{{ olt.onts.count() }}</td>
+                    <td><span class="badge badge-unknown" data-olt-id="{{ olt.id }}">...</span></td>
+                    <td>
+                        <button class="btn btn-secondary btn-xs" onclick="showDetail('{{ olt.id }}')">Detail</button>
+                        <button class="btn btn-secondary btn-xs" onclick="showModal('/olt/{{ olt.id }}/edit')">Edit</button>
+                        <button class="btn btn-danger btn-xs" onclick="deleteOlt('{{ olt.id }}','{{ olt.name }}')">Delete</button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-muted text-sm" style="padding:40px;text-align:center;font-style:italic;">No OLTs registered yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function checkStatuses() {
+    document.querySelectorAll('[data-olt-id]').forEach(async el => {
+        try {
+            const r = await fetch('/api/olt/' + el.dataset.oltId + '/status');
+            const d = await r.json();
+            el.className = 'badge ' + (d.status === 'online' ? 'badge-online' : 'badge-offline');
+            el.textContent = d.status;
+        } catch { el.textContent = 'error'; }
+    });
+}
+checkStatuses();
+
+async function showModal(url) {
+    const r = await fetch(url);
+    const html = await r.text();
+    const c = document.getElementById('modal-container');
+    c.innerHTML = html;
+}
+
+function closeModal() { document.getElementById('modal-container').innerHTML = ''; }
+
+async function showDetail(id) {
+    const r = await fetch('/api/olt/' + id);
+    const olt = await r.json();
+    const sr = await fetch('/api/olt/' + id + '/status');
+    const status = await sr.json();
+    let configHtml = '';
+    try {
+        const cr = await fetch('/api/olt/' + id + '/config');
+        const cd = await cr.json();
+        configHtml = cd.config ? `<pre>${cd.config}</pre>` : '<p class="text-muted">No config available</p>';
+    } catch { configHtml = '<p class="text-red">Failed to fetch config</p>'; }
+
+    const c = document.getElementById('modal-container');
+    c.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header">
+          <div class="flex items-center gap-2">
+            <span class="badge ${status.status==='online'?'badge-online':'badge-offline'}">${status.status}</span>
+            <h3>${olt.name}</h3>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+            <div class="card" style="padding:12px;">
+              <div class="stat-label">Status</div>
+              <div class="stat-value" style="font-size:18px;">${status.status}</div>
+            </div>
+            <div class="card" style="padding:12px;">
+              <div class="stat-label">Vendor</div>
+              <div class="stat-value" style="font-size:18px;">${olt.type}</div>
+            </div>
+            <div class="card" style="padding:12px;">
+              <div class="stat-label">Username</div>
+              <div class="stat-value" style="font-size:18px;overflow:hidden;text-overflow:ellipsis;">${olt.username}</div>
+            </div>
+            <div class="card" style="padding:12px;">
+              <div class="stat-label">IP</div>
+              <div class="stat-value monospace" style="font-size:18px;">${olt.ip}</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <h4 style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:8px;">Running Configuration</h4>
+            ${configHtml}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function closeModal() { document.getElementById('modal-container').innerHTML = ''; }
+
+async function submitForm(e) {
+    e.preventDefault();
+    const form = e.target;
+    const data = new FormData(form);
+    try {
+        const r = await fetch(form.action, { method: 'POST', body: data });
+        const d = await r.json();
+        if (d.status === 'ok') {
+            toast('OLT saved successfully');
+            closeModal();
+            location.reload();
+        } else {
+            toast('Error: ' + JSON.stringify(d), 'error');
+        }
+    } catch (err) {
+        toast('Error: ' + err.message, 'error');
+    }
+}
+
+async function deleteOlt(id, name) {
+    if (!confirm('Delete OLT "' + name + '"? This will also delete all associated ONTs.')) return;
+    try {
+        const r = await fetch('/olt/' + id + '/delete', { method: 'POST' });
+        const d = await r.json();
+        toast('OLT deleted successfully');
+        location.reload();
+    } catch { toast('Failed to delete OLT', 'error'); }
+}
+</script>
+{% endblock %}

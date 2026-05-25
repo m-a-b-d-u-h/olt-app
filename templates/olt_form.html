@@ -1,0 +1,110 @@
+{% if not olt %}
+{# CREATE FORM #}
+<div class="modal-overlay" onclick="if(event.target===this)window.parent.closeModal()">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Add New OLT</h3>
+            <button class="btn btn-secondary btn-sm" onclick="window.parent.closeModal()">&times;</button>
+        </div>
+        <form onsubmit="submitForm(event)" action="{{ request.url }}">
+        <div class="modal-body">
+            <div class="form-group">
+                <label>OLT Name</label>
+                <input name="name" class="form-control" placeholder="e.g. Core-OLT-01" required>
+            </div>
+            <div class="form-group">
+                <label>IP Address</label>
+                <input name="ip" class="form-control" placeholder="192.168.1.1" required pattern="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}">
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input name="username" class="form-control" placeholder="admin" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input name="password" type="password" class="form-control" placeholder="password" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>OLT Vendor</label>
+                <select name="type" class="form-control">
+                    <option value="Huawei">Huawei</option>
+                    <option value="ZTE">ZTE</option>
+                    <option value="Nokia">Nokia</option>
+                </select>
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Line Profile ID</label>
+                    <input name="line_profile_id" class="form-control" value="10">
+                </div>
+                <div class="form-group">
+                    <label>Service Profile ID</label>
+                    <input name="srv_profile_id" class="form-control" value="10">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="window.parent.closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Register</button>
+        </div>
+        </form>
+    </div>
+</div>
+{% else %}
+{# EDIT FORM #}
+<div class="modal-overlay" onclick="if(event.target===this)window.parent.closeModal()">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Edit OLT: {{ olt.name }}</h3>
+            <button class="btn btn-secondary btn-sm" onclick="window.parent.closeModal()">&times;</button>
+        </div>
+        <form onsubmit="submitForm(event)" action="{{ request.url }}">
+        <div class="modal-body">
+            <div class="form-group">
+                <label>OLT Name</label>
+                <input name="name" class="form-control" value="{{ olt.name }}" required>
+            </div>
+            <div class="form-group">
+                <label>IP Address</label>
+                <input name="ip" class="form-control" value="{{ olt.ip }}" required pattern="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}">
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input name="username" class="form-control" value="{{ olt.username }}" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input name="password" type="password" class="form-control" value="{{ olt.password }}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>OLT Vendor</label>
+                <select name="type" class="form-control">
+                    <option value="Huawei" {% if olt.type=='Huawei' %}selected{% endif %}>Huawei</option>
+                    <option value="ZTE" {% if olt.type=='ZTE' %}selected{% endif %}>ZTE</option>
+                    <option value="Nokia" {% if olt.type=='Nokia' %}selected{% endif %}>Nokia</option>
+                </select>
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Line Profile ID</label>
+                    <input name="line_profile_id" class="form-control" value="{{ olt.line_profile_id }}">
+                </div>
+                <div class="form-group">
+                    <label>Service Profile ID</label>
+                    <input name="srv_profile_id" class="form-control" value="{{ olt.srv_profile_id }}">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="window.parent.closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Update</button>
+        </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+

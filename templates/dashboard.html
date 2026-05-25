@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Dashboard</h2>
+        <p>Network status summary.</p>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="card stat-card">
+        <div class="stat-label">Total OLTs</div>
+        <div class="stat-value">{{ olts|length }}</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-label">Active ONTs</div>
+        <div class="stat-value">{{ onts|length }}</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-label">Online OLTs</div>
+        <div class="stat-value" id="online-olts">...</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-label">Offline OLTs</div>
+        <div class="stat-value" id="offline-olts">...</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3>Recent Activities</h3>
+    </div>
+    <div class="card-body text-muted text-sm" style="font-style:italic;">
+        No recent activities found.
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h3>OLT Devices</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Name</th><th>IP</th><th>Type</th><th>ONT Count</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for olt in olts %}
+                <tr>
+                    <td><strong>{{ olt.name }}</strong></td>
+                    <td class="monospace text-blue">{{ olt.ip }}</td>
+                    <td><span class="badge badge-registered">{{ olt.type }}</span></td>
+                    <td>{{ olt.onts.count() }}</td>
+                    <td><span class="badge badge-unknown" data-olt-id="{{ olt.id }}">checking...</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-muted text-sm" style="padding:40px;text-align:center;font-style:italic;">No OLTs registered yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function checkStatuses() {
+    const els = document.querySelectorAll('[data-olt-id]');
+    let online = 0, offline = 0;
+    for (const el of els) {
+        try {
+            const r = await fetch('/api/olt/' + el.dataset.oltId + '/status');
+            const d = await r.json();
+            if (d.status === 'online') {
+                el.className = 'badge badge-online';
+                el.textContent = 'online';
+                online++;
+            } else {
+                el.className = 'badge badge-offline';
+                el.textContent = 'offline';
+                offline++;
+            }
+        } catch {
+            el.className = 'badge badge-offline';
+            el.textContent = 'error';
+            offline++;
+        }
+    }
+    document.getElementById('online-olts').textContent = online;
+    document.getElementById('offline-olts').textContent = offline;
+}
+checkStatuses();
+</script>
+{% endblock %}
