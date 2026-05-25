@@ -327,7 +327,7 @@ def get_registered_onts(olt, slot, pon):
 
     onts = parse_onts(raw)
     if not onts:
-        return []
+        return [], raw
 
     rx_map = get_onts_optical_info(olt, [{'slot': slot, 'pon': pon, 'ont_id': o['ont_id']} for o in onts])
     vlan_map = get_onts_vlan_info(olt, [{'slot': slot, 'pon': pon, 'ont_id': o['ont_id']} for o in onts])
