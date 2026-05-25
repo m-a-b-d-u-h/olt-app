@@ -54,8 +54,13 @@ def _telnet_login(olt):
 
 
 def _telnet_send_command(tn, command, delay=3):
-    tn.sendall(command.encode() + b'\r\n')
+    tn.sendall(command.encode() + b'\r')
     time.sleep(delay)
+    try:
+        tn.sendall(b'\r')
+        time.sleep(1)
+    except:
+        pass
     data, _ = _telnet_read_until(tn, [b'>', b'#', b']'], timeout=5)
     lines = data.decode('ascii', errors='replace')
     return lines
