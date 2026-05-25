@@ -19,7 +19,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
-            cd ${{ secrets.VPS_PATH }}
+            cd /home/olt/olt-app
             git pull origin main
             ./setup.sh
             sudo systemctl restart olt-app
