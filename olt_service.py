@@ -1,7 +1,7 @@
 import re
 import socket
 import time
-from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
+from netmiko import ConnectHandler
 
 
 def _get_netmiko_params(olt, telnet=False):
@@ -53,8 +53,6 @@ def _shell(olt, commands, delay_after=2, use_telnet=False):
             output_parts.append(out)
         conn.disconnect()
         return '\n'.join(output_parts)
-    except (NetmikoTimeoutException, NetmikoAuthenticationException) as e:
-        raise Exception(f'Timeout connecting to {olt.ip}: {str(e)}')
     except Exception as e:
         if not use_telnet:
             return _shell(olt, commands, delay_after, use_telnet=True)
