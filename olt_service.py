@@ -1,23 +1,21 @@
 import re
 import socket
 import time
-import paramiko
 from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
 
-paramiko.Transport._disabled_algorithms = {"kex": []}
-paramiko.Transport._preferred_kex = (
-    'diffie-hellman-group1-sha1',
-    'diffie-hellman-group-exchange-sha1',
-    'diffie-hellman-group14-sha1',
-    'diffie-hellman-group14-sha256',
-    'diffie-hellman-group-exchange-sha256',
-    'ecdh-sha2-nistp256',
-    'ecdh-sha2-nistp384',
-    'ecdh-sha2-nistp521',
-    'curve25519-sha256@libssh.org',
-)
 
-def _get_netmiko_params(olt):
+def _get_netmiko_params(olt, telnet=False):
+    if telnet:
+        return {
+            'device_type': 'huawei_telnet',
+            'host': olt.ip,
+            'username': olt.username,
+            'password': olt.password,
+            'port': 23,
+            'timeout': 15,
+            'global_delay_factor': 2,
+            'session_timeout': 60,
+        }
     return {
         'device_type': 'huawei',
         'host': olt.ip,
@@ -31,43 +29,49 @@ def _get_netmiko_params(olt):
     }
 
 def check_olt_status(olt):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(3)
-    try:
-        sock.connect((olt.ip, 22))
-        sock.close()
-        return {'status': 'online'}
-    except:
-        return {'status': 'offline'}
+    for port in (22, 23):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
+        try:
+            sock.connect((olt.ip, port))
+            sock.close()
+            return {'status': 'online', 'port': port}
+        except:
+            pass
+    return {'status': 'offline'}
 
-def _shell(olt, commands, delay_after=2):
-    params = _get_netmiko_params(olt)
+def _shell(olt, commands, delay_after=2, use_telnet=False):
+    params = _get_netmiko_params(olt, telnet=use_telnet)
     try:
         conn = ConnectHandler(**params)
-        conn.enable()
-        conn.config_mode()
+        if not use_telnet:
+            conn.enable()
+            conn.config_mode()
         output_parts = []
         for cmd in commands:
             out = conn.send_command(cmd, delay=delay_after)
             output_parts.append(out)
         conn.disconnect()
         return '\n'.join(output_parts)
-    except NetmikoTimeoutException as e:
+    except (NetmikoTimeoutException, NetmikoAuthenticationException) as e:
         raise Exception(f'Timeout connecting to {olt.ip}: {str(e)}')
-    except NetmikoAuthenticationException as e:
-        raise Exception(f'Auth failed for {olt.ip}: {str(e)}')
     except Exception as e:
+        if not use_telnet:
+            return _shell(olt, commands, delay_after, use_telnet=True)
         raise Exception(f'SSH error for {olt.ip}: {str(e)}')
 
-def execute_command(olt, command):
-    params = _get_netmiko_params(olt)
+def execute_command(olt, command, use_telnet=False):
+    params = _get_netmiko_params(olt, telnet=use_telnet)
     try:
         conn = ConnectHandler(**params)
-        conn.enable()
+        if not use_telnet:
+            conn.enable()
         output = conn.send_command(command, delay=2)
         conn.disconnect()
         return output
     except Exception as e:
+        if not use_telnet:
+            return execute_command(olt, command, use_telnet=True)
         raise Exception(f'Command failed: {str(e)}')
 
 def get_olt_config(olt):
