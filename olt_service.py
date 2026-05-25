@@ -293,8 +293,8 @@ def get_onts_vlan_info(olt, onts):
     cmds = []
     for ont in valid:
         cmds.append(f'display service-port port 0/{ont["slot"]}/{ont["pon"]} ont {ont["ont_id"]}')
-        cmds.append('')
     output = _shell(olt, cmds, delay_after=2)
+    output = output.replace('\r', '')
 
     for ont in valid:
         key = f'{ont["slot"]}/{ont["pon"]}/{ont["ont_id"]}'
@@ -304,8 +304,8 @@ def get_onts_vlan_info(olt, onts):
             results[key] = None
             continue
         after = output[idx + len(cmd_str):]
-        m = re.search(r'^\s*\d+\s+(\d+)\s+', after, re.M)
-        results[key] = m.group(1) if m else None
+        m = re.search(r'^\s*(\d+)\s+(\d+)\s+', after, re.M)
+        results[key] = m.group(2) if m else None
     return results
 
 
