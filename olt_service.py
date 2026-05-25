@@ -62,9 +62,11 @@ def _telnet_send_command(tn, command, delay=3):
     except:
         pass
     data, _ = _telnet_read_until(tn, [b'>', b'#', b']'], timeout=5)
-    if b'---- More' in data or b'---More---' in data:
-        tn.sendall(b'q')
-        time.sleep(1)
+    for _ in range(5):
+        if not (b'---- More' in data or b'---More---' in data):
+            break
+        tn.sendall(b'q\r')
+        time.sleep(2)
         more_data, _ = _telnet_read_until(tn, [b'>', b'#', b']'], timeout=5)
         data += more_data
     lines = data.decode('ascii', errors='replace')
