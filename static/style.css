@@ -134,7 +134,6 @@ pre { background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; overflow-x
     .bottom-nav a:hover { color: #e2e8f0; text-decoration: none; }
     .bottom-nav a.active { color: #60a5fa; }
     .bottom-nav a svg { width: 22px; height: 22px; }
-    .bottom-nav a.theme-btn { font-size: 18px; line-height: 1; }
 }
 .sidebar nav button {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 14px;
