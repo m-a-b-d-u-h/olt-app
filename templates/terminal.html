@@ -95,7 +95,7 @@ function connectTerminal() {
     document.getElementById('term-status').textContent = 'connecting';
     document.getElementById('term-status').className = 'badge badge-offline';
 
-    socket = io();
+    socket = io({ transports: ['websocket'], timeout: 30000 });
     socket.on('connect', () => {
         socket.emit('ssh:connect', {
             host: opt.dataset.ip,
