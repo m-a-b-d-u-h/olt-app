@@ -16,9 +16,9 @@
             <a href="/olt" class="{% if request.path.startswith('/olt') %}active{% endif %}">OLT List</a>
             <a href="/ont" class="{% if request.path.startswith('/ont') %}active{% endif %}">ONT Provision</a>
             <a href="/terminal" class="{% if request.path.startswith('/terminal') %}active{% endif %}">Terminal</a>
+            <button onclick="toggleTheme()" id="theme-btn-desk" title="Toggle theme">🌙 Dark</button>
         </nav>
         <div class="version">v1.0.0 Flask</div>
-        <button class="theme-btn-desktop" onclick="toggleTheme()" id="theme-btn-desk" title="Toggle theme">🌙 Dark</button>
     </aside>
     <div class="main">
         <div class="content">
