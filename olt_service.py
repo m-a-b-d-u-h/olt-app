@@ -316,12 +316,13 @@ def get_registered_onts(olt, slot, pon):
 
     def parse_onts(output):
         onts = []
-        for m in re.finditer(r'O[NT]+[\s-]*ID\s*:\s*(\d+)[\s\S]*?SN\s*:\s*(\S+)', output, re.I):
-            onts.append({'ont_id': int(m.group(1)), 'sn': m.group(2), 'status': 'online'})
-        if not onts:
-            for m in re.finditer(r'^\s*\d+/\s*\d+/\d+\s+(\d+)\s+([A-F0-9]+)\s+(\S+)', output, re.M):
-                onts.append({'ont_id': int(m.group(1)), 'sn': m.group(2), 'status': m.group(3)})
-        for m in re.finditer(r'^\s*\d+/\s*\d+/\d+\s+(\d+)\s+(.+)$', output, re.M):
+        for m in re.finditer(r'^\s*\d+/\s*\d+/\d+\s+(\d+)\s+([A-F0-9]+)\s+(\S+)', output, re.M):
+            onts.append({'ont_id': int(m.group(1)), 'sn': m.group(2), 'status': m.group(3)})
+        desc_section = output
+        desc_idx = output.find('Description')
+        if desc_idx != -1:
+            desc_section = output[desc_idx:]
+        for m in re.finditer(r'^\s*\d+/\s*\d+/\d+\s+(\d+)\s+(.+)', desc_section, re.M):
             oid = int(m.group(1))
             desc = m.group(2).strip()
             for o in onts:
