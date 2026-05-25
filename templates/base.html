@@ -13,8 +13,8 @@
         <h1>OLT Master</h1>
         <nav>
             <a href="/" class="{% if not request.path.startswith('/olt') and not request.path.startswith('/ont') and not request.path.startswith('/terminal') %}active{% endif %}">Dashboard</a>
-            <a href="/olt" class="{% if request.path.startswith('/olt') %}active{% endif %}">OLT List</a>
-            <a href="/ont" class="{% if request.path.startswith('/ont') %}active{% endif %}">ONT Provision</a>
+            <a href="/olt" class="{% if request.path.startswith('/olt') %}active{% endif %}">OLT Management</a>
+            <a href="/ont" class="{% if request.path.startswith('/ont') %}active{% endif %}">ONT Management</a>
             <a href="/terminal" class="{% if request.path.startswith('/terminal') %}active{% endif %}">Terminal</a>
             <button onclick="toggleTheme()" id="theme-btn-desk" title="Toggle theme">🌙 Dark</button>
         </nav>

@@ -8,14 +8,15 @@
     </div>
 </div>
 
-<div class="stats-grid">
-    <div class="card stat-card">
-        <div class="stat-label">Total OLTs</div>
-        <div class="stat-value">{{ olts|length }}</div>
+<div class="card" style="display:flex;gap:16px;padding:24px;">
+    <div style="flex:1;text-align:center;">
+        <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.4);">Total OLTs</div>
+        <div style="font-size:36px;font-weight:800;margin-top:6px;">{{ olts|length }}</div>
     </div>
-    <div class="card stat-card">
-        <div class="stat-label">Active ONTs</div>
-        <div class="stat-value">{{ onts|length }}</div>
+    <div style="width:1px;background:rgba(255,255,255,0.1);"></div>
+    <div style="flex:1;text-align:center;">
+        <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.4);">Active ONTs</div>
+        <div style="font-size:36px;font-weight:800;margin-top:6px;">{{ onts|length }}</div>
     </div>
 </div>
 
