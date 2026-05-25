@@ -5,8 +5,14 @@
 .terminal-wrapper { display:flex; flex-direction:column; height:calc(100vh - 90px); margin:-24px -32px; }
 .terminal-header { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:#0f0f0f; border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0; }
 .terminal-body { flex:1; display:flex; overflow:hidden; }
-.terminal-screen { flex:1; background:#0a0a0a; display:flex; flex-direction:column; position:relative; min-height:0; }
-#terminal-container { flex:1; overflow:hidden; padding:4px; }
+.terminal-screen { flex:1; background:#0a0a0a; display:flex; flex-direction:column; }
+.terminal-output { flex:1; overflow-y:auto; padding:12px; font-family:'SF Mono','Fira Code',monospace; font-size:13px; line-height:1.5; color:#e2e8f0; background:#0a0a0a; white-space:pre-wrap; }
+.terminal-output .prompt { color:#60a5fa; }
+.terminal-output .system { color:rgba(255,255,255,0.4); font-style:italic; }
+.terminal-output .error { color:#f87171; }
+.terminal-input-row { display:flex; padding:8px 12px; background:#0a0a0a; border-top:1px solid rgba(255,255,255,0.05); flex-shrink:0; }
+.terminal-input-row input { flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:8px 12px; color:#e2e8f0; font-family:'SF Mono','Fira Code',monospace; font-size:13px; outline:none; }
+.terminal-input-row input:focus { border-color:#3b82f6; }
 .quick-panel { width:280px; background:#0f0f0f; border-left:1px solid rgba(255,255,255,0.1); padding:12px; overflow-y:auto; flex-shrink:0; }
 .quick-panel h3 { font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.3); font-weight:700; margin-bottom:12px; }
 .quick-grid { display:flex; flex-direction:column; gap:4px; }
@@ -35,7 +41,12 @@
     </div>
     <div class="terminal-body">
         <div class="terminal-screen">
-            <div id="terminal-container"></div>
+            <div class="terminal-output" id="term-output">
+                <div class="system">[System] Pilih OLT dan klik Connect untuk memulai sesi terminal.</div>
+            </div>
+            <div class="terminal-input-row">
+                <input type="text" id="term-input" placeholder="Enter command..." disabled onkeydown="if(event.key==='Enter')sendCommand()">
+            </div>
         </div>
         <div class="quick-panel">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -49,18 +60,8 @@
 {% endblock %}
 {% block scripts %}
 <script>
-(function() {
-    var link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css';
-    document.head.appendChild(link);
-})();
-</script>
-<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-<script>
 let socket = null;
 let connected = false;
-let term = null;
 
 let QUICK_CMDS = [];
 
@@ -123,39 +124,13 @@ async function addQuickCmd() {
 document.getElementById('quick-grid').innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:11px;padding:8px;text-align:center;">Loading...</div>';
 loadQuickCmds();
 
-function initTerminal() {
-    if (term) { term.dispose(); term = null; }
-    term = new Terminal({
-        cursorBlink: true,
-        cursorStyle: 'block',
-        fontSize: 14,
-        fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace",
-        theme: {
-            background: '#0a0a0a',
-            foreground: '#e2e8f0',
-            cursor: '#e2e8f0',
-            selectionBackground: '#3b82f644',
-            black: '#000000',
-            red: '#f87171',
-            green: '#4ade80',
-            yellow: '#fbbf24',
-            blue: '#60a5fa',
-            magenta: '#c084fc',
-            cyan: '#22d3ee',
-            white: '#e2e8f0',
-        },
-        allowTransparency: false,
-        rows: 30,
-        cols: 80,
-    });
-    term.open(document.getElementById('terminal-container'));
-    term.write('\r\n\x1b[1;34m[System]\x1b[0m Pilih OLT dan klik Connect untuk memulai.\r\n\r\n');
-    term.focus();
-
-    term.onData(function(data) {
-        if (!connected || !socket) return;
-        socket.emit('terminal:input', data);
-    });
+function appendText(text, cls='') {
+    const el = document.getElementById('term-output');
+    const div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = text;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
 }
 
 function connectTerminal() {
@@ -163,7 +138,7 @@ function connectTerminal() {
     const opt = sel.options[sel.selectedIndex];
     if (!opt || !opt.value) { toast('Select an OLT first', 'error'); return; }
 
-    term.write('\r\n\x1b[1;34m[System]\x1b[0m Connecting to \x1b[33m' + opt.dataset.ip + '\x1b[0m...\r\n');
+    appendText('[System] Connecting to ' + opt.dataset.ip + '...', 'system');
     document.getElementById('term-status').textContent = 'connecting';
     document.getElementById('term-status').className = 'badge badge-offline';
 
@@ -181,17 +156,18 @@ function connectTerminal() {
         document.getElementById('term-status').className = 'badge badge-online';
         document.getElementById('connect-btn').style.display = 'none';
         document.getElementById('disconnect-btn').style.display = '';
-        term.focus();
+        document.getElementById('term-input').disabled = false;
+        document.getElementById('term-input').focus();
         updateQuickBtnState();
-        term.write('\x1b[1;34m[System]\x1b[0m Connected.\r\n');
+        appendText('[System] Connected.', 'system');
     });
     socket.on('ssh:error', (data) => {
-        term.write('\r\n\x1b[1;31m[Error]\x1b[0m ' + (data.message || 'Connection failed') + '\r\n');
+        appendText('[Error] ' + (data.message || 'Connection failed'), 'error');
         toast('Connection failed', 'error');
         disconnectTerminal();
     });
     socket.on('terminal:data', (data) => {
-        term.write(data);
+        appendText(data);
     });
     socket.on('disconnect', () => disconnectTerminal());
 }
@@ -203,8 +179,18 @@ function disconnectTerminal() {
     document.getElementById('term-status').className = 'badge badge-offline';
     document.getElementById('connect-btn').style.display = '';
     document.getElementById('disconnect-btn').style.display = 'none';
+    document.getElementById('term-input').disabled = true;
     updateQuickBtnState();
-    term.write('\r\n\x1b[1;34m[System]\x1b[0m Disconnected.\r\n');
+    appendText('[System] Disconnected.', 'system');
+}
+
+function sendCommand() {
+    if (!connected || !socket) return;
+    const input = document.getElementById('term-input');
+    const cmd = input.value;
+    if (!cmd) return;
+    socket.emit('terminal:input', cmd + '\n');
+    input.value = '';
 }
 
 function updateQuickBtnState() {
@@ -229,7 +215,5 @@ async function runQuick(id) {
     document.getElementById('qe-'+id).disabled = !connected;
     document.getElementById('qd-'+id).disabled = !connected;
 }
-
-initTerminal();
 </script>
 {% endblock %}

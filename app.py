@@ -426,13 +426,6 @@ def handle_ssh_connect(data):
         )
         conn.enable()
         active_connections[sid] = conn
-        time.sleep(0.5)
-        try:
-            banner = conn.read_channel()
-            if banner:
-                emit('terminal:data', banner)
-        except:
-            pass
         emit('ssh:connected', {'message': 'SSH Connection established'})
     except Exception as e:
         import traceback
@@ -468,18 +461,6 @@ def handle_ssh_connect(data):
             tn.sendall(password.encode() + b'\n')
             time.sleep(1)
             tn.settimeout(None)
-            out = b''
-            try:
-                tn.settimeout(0.5)
-                while True:
-                    chunk = tn.recv(4096)
-                    if not chunk: break
-                    out += chunk
-            except:
-                pass
-            tn.settimeout(None)
-            if out:
-                emit('terminal:data', out.decode('ascii', errors='replace'))
             active_connections[sid] = tn
             emit('ssh:connected', {'message': 'Telnet Connection established'})
         except Exception as e2:
@@ -492,19 +473,13 @@ def handle_terminal_input(data):
     if not conn:
         return
     try:
-        if hasattr(conn, 'write_channel'):
-            conn.write_channel(data)
-            time.sleep(0.05)
-            try:
-                out = conn.read_channel()
-                if out:
-                    emit('terminal:data', out)
-            except:
-                pass
+        if hasattr(conn, 'send_command_timing'):
+            output = conn.send_command_timing(data, delay=0.3)
+            emit('terminal:data', output)
         elif hasattr(conn, 'recv'):
             conn.sendall(data.encode())
-            time.sleep(0.05)
-            conn.settimeout(0.1)
+            time.sleep(0.3)
+            conn.settimeout(0.5)
             try:
                 out = b''
                 while True:
@@ -514,15 +489,13 @@ def handle_terminal_input(data):
             except:
                 pass
             conn.settimeout(None)
-            if out:
-                emit('terminal:data', out.decode('ascii', errors='replace'))
+            emit('terminal:data', out.decode('ascii', errors='replace'))
         elif hasattr(conn, 'write'):
             conn.write(data.encode())
-            time.sleep(0.05)
+            time.sleep(0.3)
             try:
-                out = conn.read_very_eager()
-                if out:
-                    emit('terminal:data', out.decode('ascii', errors='replace'))
+                out = conn.read_very_eager().decode('ascii', errors='replace')
+                emit('terminal:data', out)
             except:
                 pass
     except Exception as e:
