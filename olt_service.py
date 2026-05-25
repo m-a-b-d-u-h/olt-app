@@ -18,37 +18,47 @@ def _get_netmiko_params(olt):
     }
 
 
+def _telnet_read_until(tn, patterns, timeout=10):
+    data = b''
+    tn.settimeout(timeout)
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            chunk = tn.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+            for pat in patterns:
+                if isinstance(pat, bytes) and pat.lower() in data.lower():
+                    return data, pat
+        except socket.timeout:
+            break
+    return data, None
+
+
 def _telnet_login(olt):
     tn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tn.settimeout(10)
     tn.connect((olt.ip, 23))
-    tn.sendall(b'\n')
-    time.sleep(1)
-    data = b''
-    while True:
-        try:
-            chunk = tn.recv(4096)
-            if not chunk: break
-            data += chunk
-            if b'name:' in data.lower() or b'Username:' in data or b'login:' in data:
-                break
-        except socket.timeout:
-            break
+    time.sleep(0.5)
+
+    data, _ = _telnet_read_until(tn, [b'name:', b'Username:', b'login:'], timeout=8)
     tn.sendall(olt.username.encode() + b'\n')
-    data = b''
-    while True:
-        try:
-            chunk = tn.recv(4096)
-            if not chunk: break
-            data += chunk
-            if b'assword:' in data:
-                break
-        except socket.timeout:
-            break
+
+    data, _ = _telnet_read_until(tn, [b'assword:'], timeout=8)
     tn.sendall(olt.password.encode() + b'\n')
-    time.sleep(1)
+
+    data, _ = _telnet_read_until(tn, [b'>', b'#', b']'], timeout=5)
     tn.settimeout(None)
     return tn
+
+
+def _telnet_send_command(tn, command, delay=3):
+    tn.sendall(command.encode() + b'\n')
+    time.sleep(delay)
+    data, _ = _telnet_read_until(tn, [b'>', b'#', b']'], timeout=5)
+    lines = data.decode('ascii', errors='replace')
+    return lines
 
 
 def _telnet_shell(olt, commands, delay_after=2):
@@ -57,19 +67,8 @@ def _telnet_shell(olt, commands, delay_after=2):
     try:
         for cmd in commands:
             if cmd:
-                tn.sendall(cmd.encode() + b'\n')
-                time.sleep(delay_after)
-                tn.settimeout(3)
-                out = b''
-                while True:
-                    try:
-                        chunk = tn.recv(4096)
-                        if not chunk: break
-                        out += chunk
-                    except socket.timeout:
-                        break
-                tn.settimeout(None)
-                output_parts.append(out.decode('ascii', errors='replace'))
+                out = _telnet_send_command(tn, cmd, delay=delay_after)
+                output_parts.append(out)
     finally:
         try:
             tn.close()
@@ -309,6 +308,8 @@ def get_onts_vlan_info(olt, onts):
 
 def get_registered_onts(olt, slot, pon):
     raw = _shell(olt, [f'interface gpon 0/{slot}', f'display ont info {pon} all', 'quit'])
+    print(f'[DEBUG] Raw output from OLT {olt.ip} slot {slot} pon {pon}:')
+    print(raw)
 
     def parse_onts(output):
         onts = []
