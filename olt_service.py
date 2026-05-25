@@ -15,6 +15,7 @@ def _get_netmiko_params(olt, telnet=False):
             'timeout': 15,
             'global_delay_factor': 2,
             'session_timeout': 60,
+            'global_cmd_verify': False,
         }
     return {
         'device_type': 'huawei',
