@@ -390,16 +390,36 @@ def handle_ssh_connect(data):
         import traceback
         traceback.print_exc()
         try:
-            from telnetlib import Telnet
-            tn = Telnet(host, port=23, timeout=10)
-            tn.write(b'\n')
+            import socket as _socket
+            tn = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            tn.settimeout(10)
+            tn.connect((host, 23))
+            tn.sendall(b'\n')
             time.sleep(1)
-            tn.read_until(b'name:', timeout=5)
-            tn.write(username.encode() + b'\n')
-            tn.read_until(b'password:', timeout=5)
-            tn.write(password.encode() + b'\n')
+            data = b''
+            while True:
+                try:
+                    chunk = tn.recv(4096)
+                    if not chunk: break
+                    data += chunk
+                    if b'name:' in data or b'Username:' in data or b'login:' in data:
+                        break
+                except _socket.timeout:
+                    break
+            tn.sendall(username.encode() + b'\n')
+            data = b''
+            while True:
+                try:
+                    chunk = tn.recv(4096)
+                    if not chunk: break
+                    data += chunk
+                    if b'assword:' in data:
+                        break
+                except _socket.timeout:
+                    break
+            tn.sendall(password.encode() + b'\n')
             time.sleep(1)
-            tn.read_very_eager()
+            tn.settimeout(None)
             active_connections[sid] = tn
             emit('ssh:connected', {'message': 'Telnet Connection established'})
         except Exception as e2:
@@ -415,6 +435,20 @@ def handle_terminal_input(data):
         if hasattr(conn, 'send_command_timing'):
             output = conn.send_command_timing(data, delay=0.3)
             emit('terminal:data', output)
+        elif hasattr(conn, 'recv'):
+            conn.sendall(data.encode())
+            time.sleep(0.3)
+            conn.settimeout(0.5)
+            try:
+                out = b''
+                while True:
+                    chunk = conn.recv(4096)
+                    if not chunk: break
+                    out += chunk
+            except:
+                pass
+            conn.settimeout(None)
+            emit('terminal:data', out.decode('ascii', errors='replace'))
         elif hasattr(conn, 'write'):
             conn.write(data.encode())
             time.sleep(0.3)
