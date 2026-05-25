@@ -78,8 +78,8 @@ def _telnet_shell(olt, commands, delay_after=2):
     output_parts = []
     try:
         _telnet_send_command(tn, 'enable', delay=1)
+        _telnet_send_command(tn, 'mmi-mode enable', delay=1)
         _telnet_send_command(tn, 'config', delay=1)
-        _telnet_send_command(tn, 'scroll 512', delay=1)
         for cmd in commands:
             if cmd:
                 out = _telnet_send_command(tn, cmd, delay=delay_after)
