@@ -17,14 +17,6 @@
         <div class="stat-label">Active ONTs</div>
         <div class="stat-value">{{ onts|length }}</div>
     </div>
-    <div class="card stat-card">
-        <div class="stat-label">Online OLTs</div>
-        <div class="stat-value" id="online-olts">...</div>
-    </div>
-    <div class="card stat-card">
-        <div class="stat-label">Offline OLTs</div>
-        <div class="stat-value" id="offline-olts">...</div>
-    </div>
 </div>
 
 <div class="card">
@@ -66,7 +58,6 @@
 <script>
 async function checkStatuses() {
     const els = document.querySelectorAll('[data-olt-id]');
-    let online = 0, offline = 0;
     for (const el of els) {
         try {
             const r = await fetch('/api/olt/' + el.dataset.oltId + '/status');
@@ -74,20 +65,15 @@ async function checkStatuses() {
             if (d.status === 'online') {
                 el.className = 'badge badge-online';
                 el.textContent = 'online';
-                online++;
             } else {
                 el.className = 'badge badge-offline';
                 el.textContent = 'offline';
-                offline++;
             }
         } catch {
             el.className = 'badge badge-offline';
             el.textContent = 'error';
-            offline++;
         }
     }
-    document.getElementById('online-olts').textContent = online;
-    document.getElementById('offline-olts').textContent = offline;
 }
 checkStatuses();
 </script>
