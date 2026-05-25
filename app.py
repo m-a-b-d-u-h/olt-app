@@ -211,7 +211,7 @@ def api_ont_delete(ont_id):
 @app.route('/api/ont/provision', methods=['POST'])
 def api_ont_provision():
     data = request.json
-    olt = OLT.query.get_or_404(data['olt_id'])
+    olt = OLT.query.get_or_404(data.get('oltId') or data.get('olt_id'))
     result = olt_service.provision_ont(
         olt, data['slot'], data['pon'], data['sn'], data['vlan'],
         data.get('nama', ''), data.get('alamat', ''),
