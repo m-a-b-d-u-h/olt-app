@@ -22,4 +22,3 @@ jobs:
             cd /home/olt/olt-app
             git pull origin master
             ./setup.sh
-            sudo systemctl restart olt-app
